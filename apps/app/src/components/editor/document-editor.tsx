@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { SchemaType } from '@achar/types';
 import { Skeleton } from '@achar/ui';
@@ -63,6 +64,8 @@ export function DocumentEditor({
   documentId,
   isNew,
   canEdit,
+  initialLanguage,
+  languageHref,
 }: {
   projectId: string;
   dataset: string;
@@ -70,8 +73,18 @@ export function DocumentEditor({
   documentId: string;
   isNew: boolean;
   canEdit: boolean;
+  /** The language the URL named, when it named one. */
+  initialLanguage?: string | null;
+  /**
+   * The address of this document in another language, which the switch moves to.
+   *
+   * A function rather than a string because the URL is not this component's to know:
+   * the page read `new=1` out of it, and it is the page that can keep it.
+   */
+  languageHref: (language: string) => string;
 }) {
   const client = useAcharClient();
+  const router = useRouter();
   const pair = useDocumentPair(projectId, dataset, documentId, { skip: isNew });
   const { datasetInfo } = useStudio();
 
@@ -83,9 +96,15 @@ export function DocumentEditor({
    * editor has to draw *something*, and one language shows a document where no
    * language would show a form nobody could use.
    *
-   * `chosen` is null until somebody switches, and the screen follows the dataset's
-   * default until then. That is what makes adding French to a dataset, or changing
-   * which language is the default, take effect in an editor that was already open.
+   * `chosen` starts at whatever the URL named — `?lang=fr` opens in French, which is what
+   * makes a language something a link can carry — and is null when the URL names nothing.
+   * Either way the screen follows the dataset's default until somebody switches, which is
+   * what makes adding French to a dataset, or changing which language is the default, take
+   * effect in an editor that was already open.
+   *
+   * A `chosen` the dataset does not have — an old link to a language since removed — is
+   * ignored rather than drawn: the switch shows the language actually being read, which is
+   * the same answer the API gives for an unknown `language`.
    */
   const languages = useMemo(
     () =>
@@ -93,8 +112,31 @@ export function DocumentEditor({
     [datasetInfo],
   );
   const defaultLanguage = datasetInfo?.defaultLanguage ?? languages[0]!;
-  const [chosen, setChosen] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(() => initialLanguage ?? null);
   const language = chosen && languages.includes(chosen) ? chosen : defaultLanguage;
+
+  /**
+   * The switch, and the address bar with it.
+   *
+   * **A language is part of what somebody is looking at, so it belongs in the URL.** It is
+   * what makes a link to a document open in the language it was copied from, what keeps a
+   * reload from putting a translator back in English, and what lets two tabs hold two
+   * languages of one document without either being wrong.
+   *
+   * `replace` rather than `push`: the language is a way of looking at the document on
+   * screen, not a place, and a Back button that walked through languages would make the
+   * history of a studio a history of its switches. The state moves first and the URL
+   * second, so the screen never waits on a navigation to draw the language somebody asked
+   * for. Nothing here remounts: the editor's key is the type and the document, and a
+   * remount would throw away everything typed.
+   */
+  const chooseLanguage = useCallback(
+    (next: string) => {
+      setChosen(next);
+      router.replace(languageHref(next), { scroll: false });
+    },
+    [router, languageHref],
+  );
 
   const [value, setValue] = useState<Record<string, unknown>>(() =>
     initialDocument(type, { defaultLanguage }),
@@ -443,7 +485,7 @@ export function DocumentEditor({
               value={language}
               missing={missing}
               unapproved={unapproved}
-              onChange={setChosen}
+              onChange={chooseLanguage}
             />
           }
           history={

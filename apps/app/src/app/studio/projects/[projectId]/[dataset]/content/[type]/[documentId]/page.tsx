@@ -18,6 +18,13 @@ import { routes } from '@/lib/routes';
  * moment ago and nothing exists on the server yet, which is what keeps the
  * editor from reading two rows that are not there.
  *
+ * `?lang=` says which language the document is being read in, and this page is where
+ * it is both read and written: the editor is handed the language the URL names, and a
+ * function that builds the URL for another one, so that switching the switch moves the
+ * address bar with it. The language is deliberately *not* part of the editor's key
+ * below — switching a language is a way of looking at the same document, not a
+ * different document, and remounting would throw away half-written fields.
+ *
  * The schema is read from the studio shell rather than fetched here, so that the
  * form, the rail and the list are all drawn from one reading of one schema.
  */
@@ -34,6 +41,11 @@ export default function DocumentEditorPage({
 
   const type = types.find((candidate) => candidate.name === typeName) ?? null;
   const isNew = search.new === '1';
+
+  // A language the URL names and the dataset does not have is not an error to draw: the
+  // editor falls back to the default language and the switch shows what it is really
+  // reading, which is the same thing the API does with an unknown `language`.
+  const language = typeof search.lang === 'string' ? search.lang : null;
 
   if (!type) {
     return (
@@ -69,6 +81,13 @@ export default function DocumentEditorPage({
       documentId={documentId}
       isNew={isNew}
       canEdit={canEdit}
+      initialLanguage={language}
+      // Built here rather than in the editor because this is the component that holds the
+      // URL: it is the one that read `new=1`, and it is therefore the one that can keep
+      // it while the language changes.
+      languageHref={(next) =>
+        routes.documentInLanguage(projectId, dataset, typeName, documentId, next, search)
+      }
     />
   );
 }
