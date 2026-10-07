@@ -13,9 +13,12 @@ import { routes } from '@/lib/routes';
  * wrapping them in it would be a wall in front of the door.
  *
  * The providers are here rather than at the root for the reason the chrome is:
- * `AuthProvider` configures Amplify, and the public site should not carry the
- * identity provider's SDK on every page it renders to somebody who will never
- * sign in.
+ * `AuthProvider` configures Amplify, and the pages that need it are the pages that
+ * are about signing in. The one other place that carries it is the site's own bar,
+ * which reads the session to decide which buttons it draws — `(site)/layout.tsx`
+ * mounts a provider for that, and it is the only other page-level surface that
+ * does. Nothing at the root, so a surface that renders no button answerable to a
+ * session still loads none of the SDK.
  *
  * The callback path is the studio's, from the route table, because that is the
  * URL the Cognito client has registered — a Google sign-in started from here

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { AcharMark, Button, ThemeToggle } from '@achar/ui';
+import { AcharMark } from '@achar/ui';
+import { SignedOutActions, SiteActions } from '@/components/site/site-actions';
 import { SiteNav } from '@/components/site/site-nav';
 import type { Cta } from '@/content/types';
 
@@ -19,9 +20,24 @@ import type { Cta } from '@/content/types';
  * call to action either: nobody is persuaded by it. It is there because the
  * button is the way in for somebody who has no account, and a bar with only that
  * button leaves the person who already has one — the person most likely to be
- * looking at this site — with no visible door.
+ * looking at this site — with no visible door. That person is what `withSession`
+ * is about: their door is the studio, and both the link and the content button
+ * get out of its way. See `site-actions.tsx`.
+ *
+ * `withSession` is the layout saying that a user pool is configured and that
+ * `<AuthProvider>` is therefore mounted above this bar. It is a prop rather than a
+ * hook because this is a server component and a hook cannot be called in a branch
+ * — and it is the layout's to answer, because the layout is what reads the
+ * environment.
  */
-export function SiteHeader({ primaryCta }: { primaryCta?: Cta }) {
+export function SiteHeader({
+  primaryCta,
+  withSession = false,
+}: {
+  primaryCta?: Cta;
+  /** True when there is a session to read, so the bar can draw the signed-in pair. */
+  withSession?: boolean;
+}) {
   const cta = primaryCta ?? { label: 'Start building', href: '/product' };
 
   return (
@@ -36,16 +52,7 @@ export function SiteHeader({ primaryCta }: { primaryCta?: Cta }) {
         <SiteNav />
 
         <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/sign-in"
-            className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
-          >
-            Sign in
-          </Link>
-          <ThemeToggle />
-          <Button asChild size="sm">
-            <Link href={cta.href}>{cta.label}</Link>
-          </Button>
+          {withSession ? <SiteActions cta={cta} /> : <SignedOutActions cta={cta} />}
         </div>
       </div>
     </header>
