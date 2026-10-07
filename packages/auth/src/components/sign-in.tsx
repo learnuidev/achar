@@ -8,8 +8,16 @@ import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass } from
 import { messageOf, stepSentence } from '../lib/messages';
 
 /**
- * The sign-in screen: an email and a password, and Google when the deployment
- * has a Hosted UI domain.
+ * The sign-in form: an email and a password, and Google when the deployment has a
+ * Hosted UI domain.
+ *
+ * What is here is what is Cognito's business — the two calls, the step a pool with
+ * MFA answers with, and the sentence a failure becomes. The screen around it is
+ * not: the mark, the heading, the card and the link to the sign-up screen belong
+ * to whoever draws this, which is `apps/app/src/components/auth/auth-frame.tsx`.
+ * That split is what lets `/sign-in`, `/sign-up` and the studio's own sign-in
+ * screen be one frame with different words rather than three screens that drift,
+ * and it is why this returns a body with no heading of its own.
  *
  * Drawn with plain Tailwind classes and the tokens the apps already define rather
  * than with `@achar/ui`, which would be a cycle: the design system is what the
@@ -19,16 +27,7 @@ import { messageOf, stepSentence } from '../lib/messages';
  * Google is offered only when there is a domain to redirect to. A button that
  * leads to a Cognito error is worse than a button that is not there.
  */
-export function SignIn({
-  title = 'Sign in',
-  redirectTo,
-  footer,
-}: {
-  title?: string;
-  redirectTo?: string;
-  /** A node under the form — the link to the sign-up screen, in practice. */
-  footer?: React.ReactNode;
-}) {
+export function SignIn({ redirectTo }: { redirectTo?: string }) {
   const { config, loading, signedIn, refresh } = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,65 +77,60 @@ export function SignIn({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 text-card-foreground shadow-sm">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+    <>
+      {signedIn && !redirectTo ? (
+        <p className="text-sm text-muted-foreground">You are signed in.</p>
+      ) : (
+        <form className="space-y-4" onSubmit={withPassword}>
+          <label className="block space-y-2">
+            <span className={labelClass}>Email</span>
+            <input
+              className={fieldClass}
+              type="email"
+              name="email"
+              autoComplete="email"
+              required
+              placeholder="you@company.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
 
-        {signedIn && !redirectTo ? (
-          <p className="mt-4 text-sm text-muted-foreground">You are signed in.</p>
-        ) : (
-          <form className="mt-6 space-y-4" onSubmit={withPassword}>
-            <label className="block space-y-2">
-              <span className={labelClass}>Email</span>
-              <input
-                className={fieldClass}
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                placeholder="you@company.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Password</span>
+            <input
+              className={fieldClass}
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
 
-            <label className="block space-y-2">
-              <span className={labelClass}>Password</span>
-              <input
-                className={fieldClass}
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
+            {busy ? 'Signing in…' : 'Sign in'}
+          </button>
 
-            <button type="submit" disabled={busy} className={primaryButtonClass}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
+          {config.domain ? (
+            <>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
 
-            {config.domain ? (
-              <>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  or
-                  <span className="h-px flex-1 bg-border" />
-                </div>
+              <button type="button" disabled={busy} onClick={withGoogle} className={secondaryButtonClass}>
+                Continue with Google
+              </button>
+            </>
+          ) : null}
+        </form>
+      )}
 
-                <button type="button" disabled={busy} onClick={withGoogle} className={secondaryButtonClass}>
-                  Continue with Google
-                </button>
-              </>
-            ) : null}
-          </form>
-        )}
-
-        {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
-        {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
-        {footer ? <div className="mt-6 text-sm text-muted-foreground">{footer}</div> : null}
-      </div>
-    </div>
+      {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
+      {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+    </>
   );
 }

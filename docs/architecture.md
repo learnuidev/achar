@@ -33,12 +33,20 @@ packages/
 | `apps/demo` | 3003 | The third-party client |
 
 **Signing in is two pages of that app** — `/sign-in` and `/sign-up` — in a route
-group of their own, so that neither surface's chrome is around them: the site's
-header and footer would be marketing in the way of the task, and the studio's gate
-is what these pages let somebody out of. They render the auth package's `SignIn`
-and `SignUp`; the studio's gate draws the same sign-in form over whatever somebody
-tried to open, which is why signing in exists as a form and as two URLs rather
-than as three screens.
+group of their own, because signing in belongs to neither surface: the studio's gate
+is what these pages let somebody out of, and the site's footer under a login form is
+marketing in the way of the task. What they do carry of the site is its **bar** — the
+mark, the nav and the one button — so that somebody who followed a link to a form
+they cannot fill in can go and read what the product is rather than only reach for
+the back button.
+
+Under that bar, every account screen draws **one frame**:
+`apps/app/src/components/auth/auth-frame.tsx`. The Achar wordmark, a heading, the
+form in a card, and the links out beneath it; the studio's gate draws it over
+whatever somebody tried to open, and `/studio/sign-in`, the OAuth callback and
+onboarding's first step draw it as well. The form inside the card is the auth
+package's, which is why signing in exists as a form and as URLs rather than as
+screens that drift.
 
 The site and the studio are **one app**, and that is a decision about what they
 share rather than a convenience: they draw with the same design system, read the
@@ -184,7 +192,11 @@ sign-in is the one thing an app should not be inventing.
   read from `NEXT_PUBLIC_*` by `authConfigFromEnv()`.
 - `<AuthProvider>`, `useViewer(): { viewer, loading, signedIn, signOut, getToken }`,
   `useSignedIn()`.
-- `<SignIn />`, `<OAuthCallback />` — Google, and email/password.
+- `<SignIn />`, `<SignUp />`, `<OAuthCallback />` — the forms, and the OAuth
+  exchange. Each draws the *body* of the card it sits in, and the card, the heading
+  and the mark above it are the app's (`components/auth/auth-frame.tsx`): Cognito
+  belongs to this package, and the screen that gets somebody into the product
+  belongs to the product.
 - `getAccessToken(): Promise<string | null>`.
 
 ### `@achar/ui`

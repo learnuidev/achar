@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   AppWindowIcon,
@@ -20,10 +21,10 @@ import {
   Button,
   Input,
   Label,
-  Skeleton,
   cn,
 } from '@achar/ui';
 import { SignIn, useViewer } from '@achar/auth';
+import { AuthFrame, AuthFrameSkeleton } from '@/components/auth/auth-frame';
 import { AcharClientProvider } from '@/components/client-provider';
 import { StudioPreview } from '@/components/onboarding/studio-preview';
 import { useProfile } from '@/hooks/use-profile';
@@ -113,7 +114,7 @@ const TOTAL_STEPS = 4;
 export function OnboardingFlow({ apiUrl }: { apiUrl: string }) {
   const { viewer, loading } = useViewer();
 
-  if (loading) return <Waiting />;
+  if (loading) return <AuthFrameSkeleton />;
   if (!viewer) return <SignInStep />;
 
   return (
@@ -162,7 +163,7 @@ function Flow({ viewer }: { viewer: Viewer }) {
 
   // The wait for the profile is also the wait between deciding to redirect and the
   // route changing, so both draw the same thing.
-  if (profile.loading || hasProject) return <Waiting />;
+  if (profile.loading || hasProject) return <AuthFrameSkeleton />;
 
   function pick(option: Building) {
     // A project name follows the choice until somebody types one. Comparing
@@ -496,29 +497,32 @@ function Progress({ step }: { step: number }) {
   );
 }
 
-/** The frame before anything is known: a mark, and the shape of what is coming. */
-function Waiting() {
-  return (
-    <div className="flex min-h-svh items-center justify-center bg-background">
-      <div className="flex w-full max-w-md flex-col items-center gap-4 px-6">
-        <AcharMark className="h-8" />
-        <Skeleton className="h-4 w-40 rounded-md" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-      </div>
-    </div>
-  );
-}
-
 /**
  * Somebody who reached this URL without an account.
  *
  * The flow is four questions about a project that will belong to them, so it needs
- * a *them* first. The form is the auth package's own screen, titled for where they
- * are rather than framed again here — it already draws a centred card, and a
- * second frame around the first is two frames. Signing in comes back to this page
- * rather than to the studio, because the studio is the screen that would send
- * somebody with nothing to open straight back here.
+ * a *them* first. The form is the auth package's own, in the same frame every other
+ * account screen wears — the flow's whole business is the four questions, so this
+ * screen is the studio's sign-in with different words on it rather than a third
+ * place a form lives. Signing in comes back to this page rather than to the studio,
+ * because the studio is the screen that would send somebody with nothing to open
+ * straight back here.
  */
 function SignInStep() {
-  return <SignIn title="Sign in to get started" redirectTo={getStartedPath} />;
+  return (
+    <AuthFrame
+      title="Sign in to get started"
+      description="Four questions, and your project is ready to author against."
+      footer={
+        <>
+          No account yet?{' '}
+          <Link href="/sign-up" className="underline">
+            Create one
+          </Link>
+        </>
+      }
+    >
+      <SignIn redirectTo={getStartedPath} />
+    </AuthFrame>
+  );
 }

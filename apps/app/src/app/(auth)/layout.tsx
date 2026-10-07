@@ -5,12 +5,19 @@ import { AuthProvider, authConfigFromEnv } from '@achar/auth';
 import { routes } from '@/lib/routes';
 
 /**
- * The frame the two account screens share.
+ * What the two account screens share: the providers, and nothing drawn.
  *
  * A group of its own, because signing in belongs to neither surface: the site's
- * header and footer around a login form would be marketing in the way of the
- * task, and the studio's gate is what these pages let somebody *out* of, so
- * wrapping them in it would be a wall in front of the door.
+ * footer under a login form is marketing in the way of the task, and the studio's
+ * gate is what these pages let somebody *out* of, so wrapping them in it would be a
+ * wall in front of the door. What they draw instead is `AuthFrame` — the site's bar,
+ * the wordmark, the heading and the card — which is the same frame the studio's
+ * gate, its sign-in route, the OAuth callback and onboarding wear.
+ *
+ * The site's *bar* is in that frame on purpose, and is the one piece of the site's
+ * chrome these pages carry: somebody who followed a link to a form they cannot fill
+ * in should be able to go and read what the product is rather than only reach for
+ * the back button.
  *
  * The providers are here rather than at the root for the reason the chrome is:
  * `AuthProvider` configures Amplify, and the pages that need it are the pages that

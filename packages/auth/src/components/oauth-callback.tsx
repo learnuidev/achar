@@ -19,6 +19,12 @@ import { useAuthContext } from '../lib/context';
  * in flight" and "the provider sent us back with nothing" are indistinguishable
  * from here until one of them finishes, and a page that waits forever is a page
  * somebody reports as broken.
+ *
+ * The frame is the app's, the one every account screen wears
+ * (`apps/app/src/components/auth/auth-frame.tsx`). The heading is drawn here
+ * anyway, and it is the one heading in this package, because which heading it is
+ * depends on the answer this screen is sitting and waiting for: a frame that had to
+ * be told would have to be told from the outside, and the outside does not know.
  */
 export function OAuthCallback({ redirectTo = '/' }: { redirectTo?: string }) {
   const { refresh, loading, signedIn } = useAuthContext();
@@ -61,22 +67,20 @@ export function OAuthCallback({ redirectTo = '/' }: { redirectTo?: string }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 text-center text-card-foreground shadow-sm">
-        {error ? (
-          <>
-            <h1 className="text-lg font-semibold tracking-tight">Sign-in did not finish</h1>
-            <p className="mt-3 text-sm text-muted-foreground">{error}</p>
-          </>
-        ) : (
-          <>
-            <h1 className="text-lg font-semibold tracking-tight">Finishing sign-in</h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              You will be taken back to the app in a moment.
-            </p>
-          </>
-        )}
-      </div>
+    <div className="space-y-3 text-center">
+      {error ? (
+        <>
+          <h1 className="text-lg font-semibold tracking-tight">Sign-in did not finish</h1>
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </>
+      ) : (
+        <>
+          <h1 className="text-lg font-semibold tracking-tight">Finishing sign-in</h1>
+          <p className="text-sm text-muted-foreground">
+            You will be taken back to the app in a moment.
+          </p>
+        </>
+      )}
     </div>
   );
 }

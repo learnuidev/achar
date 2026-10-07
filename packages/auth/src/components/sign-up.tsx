@@ -8,7 +8,7 @@ import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass } from
 import { messageOf, stepSentence } from '../lib/messages';
 
 /**
- * The sign-up screen: an address, a name and a password, then the code Cognito
+ * The sign-up form: an address, a name and a password, then the code Cognito
  * emails.
  *
  * Two steps rather than one, because the second one is not a formality: the pool
@@ -18,21 +18,16 @@ import { messageOf, stepSentence } from '../lib/messages';
  * between them so confirming signs the person straight in rather than handing
  * them back a form they have already filled in once.
  *
+ * A form rather than a screen, for the reason `sign-in.tsx` gives: the frame
+ * around it — the mark, the heading, the card, the link to signing in — is the
+ * app's, and it is the same frame the sign-in screen wears.
+ *
  * Google is offered here for the same reason it is offered on the sign-in screen:
  * signing up with a provider and signing in with one are the same act, and a page
  * that made somebody choose the right verb would be a page that loses customers
  * who guessed wrong.
  */
-export function SignUp({
-  title = 'Create an account',
-  redirectTo,
-  footer,
-}: {
-  title?: string;
-  redirectTo?: string;
-  /** A node under the form — the link to the sign-in screen, in practice. */
-  footer?: React.ReactNode;
-}) {
+export function SignUp({ redirectTo }: { redirectTo?: string }) {
   const { config, refresh } = useAuthContext();
   const [stage, setStage] = useState<'details' | 'confirm'>('details');
   const [email, setEmail] = useState('');
@@ -126,123 +121,118 @@ export function SignUp({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 text-card-foreground shadow-sm">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+    <>
+      {stage === 'details' ? (
+        <form className="space-y-4" onSubmit={createAccount}>
+          <label className="block space-y-2">
+            <span className={labelClass}>Email</span>
+            <input
+              className={fieldClass}
+              type="email"
+              name="email"
+              autoComplete="email"
+              required
+              placeholder="you@company.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
 
-        {stage === 'details' ? (
-          <form className="mt-6 space-y-4" onSubmit={createAccount}>
-            <label className="block space-y-2">
-              <span className={labelClass}>Email</span>
-              <input
-                className={fieldClass}
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                placeholder="you@company.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>
+              Your name <span className="text-muted-foreground">(optional)</span>
+            </span>
+            <input
+              className={fieldClass}
+              type="text"
+              name="name"
+              autoComplete="name"
+              placeholder="Ada Lovelace"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
 
-            <label className="block space-y-2">
-              <span className={labelClass}>
-                Your name <span className="text-muted-foreground">(optional)</span>
-              </span>
-              <input
-                className={fieldClass}
-                type="text"
-                name="name"
-                autoComplete="name"
-                placeholder="Ada Lovelace"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Password</span>
+            <input
+              className={fieldClass}
+              type="password"
+              name="password"
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            {/* The pool's rule, said before it is broken rather than after: see
+                `passwordPolicy` in `infra/src/stacks/auth-stack.ts`. */}
+            <span className="block text-xs text-muted-foreground">
+              At least 10 characters, with an uppercase letter, a lowercase letter and a digit.
+            </span>
+          </label>
 
-            <label className="block space-y-2">
-              <span className={labelClass}>Password</span>
-              <input
-                className={fieldClass}
-                type="password"
-                name="password"
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {/* The pool's rule, said before it is broken rather than after: see
-                  `passwordPolicy` in `infra/src/stacks/auth-stack.ts`. */}
-              <span className="block text-xs text-muted-foreground">
-                At least 10 characters, with an uppercase letter, a lowercase letter and a digit.
-              </span>
-            </label>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
+            {busy ? 'Creating your account…' : 'Create account'}
+          </button>
 
-            <button type="submit" disabled={busy} className={primaryButtonClass}>
-              {busy ? 'Creating your account…' : 'Create account'}
-            </button>
+          {config.domain ? (
+            <>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
 
-            {config.domain ? (
-              <>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  or
-                  <span className="h-px flex-1 bg-border" />
-                </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={withGoogle}
+                className={secondaryButtonClass}
+              >
+                Continue with Google
+              </button>
+            </>
+          ) : null}
+        </form>
+      ) : (
+        <form className="space-y-4" onSubmit={confirm}>
+          <p className="text-sm text-muted-foreground">
+            We sent a code to <span className="font-medium text-foreground">{email}</span>. Enter
+            it to finish creating the account.
+          </p>
 
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={withGoogle}
-                  className={secondaryButtonClass}
-                >
-                  Continue with Google
-                </button>
-              </>
-            ) : null}
-          </form>
-        ) : (
-          <form className="mt-6 space-y-4" onSubmit={confirm}>
-            <p className="text-sm text-muted-foreground">
-              We sent a code to <span className="font-medium text-foreground">{email}</span>. Enter
-              it to finish creating the account.
-            </p>
+          <label className="block space-y-2">
+            <span className={labelClass}>Confirmation code</span>
+            <input
+              className={fieldClass}
+              type="text"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+              placeholder="123456"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+            />
+          </label>
 
-            <label className="block space-y-2">
-              <span className={labelClass}>Confirmation code</span>
-              <input
-                className={fieldClass}
-                type="text"
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                required
-                placeholder="123456"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
-            </label>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
+            {busy ? 'Confirming…' : 'Confirm and sign in'}
+          </button>
 
-            <button type="submit" disabled={busy} className={primaryButtonClass}>
-              {busy ? 'Confirming…' : 'Confirm and sign in'}
-            </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={resend}
+            className={secondaryButtonClass}
+          >
+            Send another code
+          </button>
+        </form>
+      )}
 
-            <button
-              type="button"
-              disabled={busy}
-              onClick={resend}
-              className={secondaryButtonClass}
-            >
-              Send another code
-            </button>
-          </form>
-        )}
-
-        {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
-        {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
-        {footer ? <div className="mt-6 text-sm text-muted-foreground">{footer}</div> : null}
-      </div>
-    </div>
+      {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
+      {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+    </>
   );
 }

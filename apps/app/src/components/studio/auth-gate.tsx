@@ -3,8 +3,9 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { AcharMark, Card, CardContent, Skeleton } from '@achar/ui';
+import { Button } from '@achar/ui';
 import { SignIn, useViewer } from '@achar/auth';
+import { AuthFrame, AuthFrameSkeleton } from '@/components/auth/auth-frame';
 import { AcharClientProvider } from '@/components/client-provider';
 import { useProfile } from '@/hooks/use-profile';
 import { getStartedPath, routes } from '@/lib/routes';
@@ -13,11 +14,12 @@ import { getStartedPath, routes } from '@/lib/routes';
  * The wall, and the two doors in it that are not behind it.
  *
  * A configured environment with nobody signed in is a *sign-in* state, not an
- * error: the studio draws its own frame around the auth package's form, so that
- * the first screen of the product still looks like the product rather than like
- * a library's default page. `/sign-in` and `/auth/callback` are let through
- * untouched — they are how somebody gets out of this state, and gating them
- * would be a wall in front of the door.
+ * error: the studio draws the account frame around the auth package's form — the
+ * same frame `/sign-in` wears, rather than a third one — so that the first screen
+ * of the product still looks like the product rather than like a library's default
+ * page. `/sign-in` and `/auth/callback` are let through untouched — they are how
+ * somebody gets out of this state, and gating them would be a wall in front of the
+ * door.
  *
  * The API client is built here, once, rather than by each screen: everything
  * under the gate is signed in by definition, so this is the earliest point at
@@ -37,7 +39,7 @@ export function StudioGate({ apiUrl, children }: { apiUrl: string; children: Rea
   }
 
   if (loading) {
-    return <GateSkeleton />;
+    return <AuthFrameSkeleton />;
   }
 
   if (!viewer) {
@@ -84,32 +86,24 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
   // The skeleton covers both the wait for the answer and the moment between the
   // redirect and the route actually changing.
   if (profile.loading || firstRun) {
-    return <GateSkeleton />;
+    return <AuthFrameSkeleton />;
   }
 
   return <>{children}</>;
 }
 
-/** What the studio draws before it knows whether it is drawing the studio. */
-function GateSkeleton() {
-  return (
-    <div className="flex min-h-svh items-center justify-center bg-background">
-      <div className="flex w-full max-w-md flex-col items-center gap-4 px-6">
-        <AcharMark className="h-8" />
-        <Skeleton className="h-4 w-40 rounded-md" />
-        <Skeleton className="h-48 w-full rounded-2xl" />
-      </div>
-    </div>
-  );
-}
-
 /**
  * The studio's own sign-in screen.
  *
- * Deliberately the same frame as the setup screen and the same mark as the rail:
- * somebody arriving here has been sent a link to a document, and the two things
- * they need to know are which product they are signing in to and that signing in
- * is the whole of what is being asked.
+ * Deliberately the same frame as `/sign-in` and as the setup screen, and the same
+ * mark as the rail: somebody arriving here has been sent a link to a document, and
+ * the two things they need to know are which product they are signing in to and
+ * that signing in is the whole of what is being asked.
+ *
+ * It answers the already-signed-in case itself because both callers want the same
+ * answer to it — the gate only draws this with nobody signed in, and
+ * `/studio/sign-in` can be opened by somebody who is, whose only business here is
+ * the way out.
  */
 export function SignInFrame({
   title = 'Sign in to Achar Studio',
@@ -118,24 +112,24 @@ export function SignInFrame({
   title?: string;
   description?: string;
 }) {
+  const { viewer, loading } = useViewer();
+
+  if (!loading && viewer) {
+    return (
+      <AuthFrame title="You are already signed in" description={`Signed in as ${viewer.email}.`}>
+        <Button asChild className="w-full">
+          <Link href={routes.projectPicker()}>Go to your projects</Link>
+        </Button>
+      </AuthFrame>
+    );
+  }
+
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6 py-12">
-      <div className="flex w-full max-w-md flex-col items-center gap-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <AcharMark className="h-9" />
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-            <p className="text-sm text-muted-foreground">{description}</p>
-          </div>
-        </div>
-
-        <Card className="w-full">
-          <CardContent className="pt-6">
-            <SignIn />
-          </CardContent>
-        </Card>
-
-        <p className="text-xs text-muted-foreground">
+    <AuthFrame
+      title={title}
+      description={description}
+      footer={
+        <>
           No account yet?{' '}
           <Link href="/sign-up" className="underline">
             Create one
@@ -144,8 +138,10 @@ export function SignInFrame({
           <Link href="/" className="underline">
             back to the site
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <SignIn />
+    </AuthFrame>
   );
 }

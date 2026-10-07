@@ -3,15 +3,17 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { SignIn, useViewer } from '@achar/auth';
+import { Button } from '@achar/ui';
+import { AuthFrame } from '@/components/auth/auth-frame';
 import { routes } from '@/lib/routes';
 
 /**
  * Signing in, as a page.
  *
- * The studio's gate draws the same form over whatever somebody tried to open;
+ * The studio's gate draws the same screen over whatever somebody tried to open;
  * this route is for the links that point at signing in rather than at a screen —
- * a footer, a README, an email. Both render the auth package's `SignIn`, so the
- * product has one sign-in form rather than two that drift.
+ * a footer, a README, an email. Both render `AuthFrame` around the auth package's
+ * `SignIn`, so the product has one sign-in screen rather than two that drift.
  *
  * Somebody already signed in is sent to the studio rather than shown a form they
  * do not need: the studio is the only surface here that has anything behind a
@@ -42,21 +44,18 @@ export function SignInForm() {
 
   if (!loading && viewer) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6">
-        <p className="text-sm text-muted-foreground">
-          You are already signed in as {viewer.email}.
-        </p>
-        <Link href={routes.projectPicker()} className="text-sm underline">
-          Go to your projects
-        </Link>
-      </div>
+      <AuthFrame title="You are already signed in" description={`Signed in as ${viewer.email}.`}>
+        <Button asChild className="w-full">
+          <Link href={routes.projectPicker()}>Go to your projects</Link>
+        </Button>
+      </AuthFrame>
     );
   }
 
   return (
-    <SignIn
+    <AuthFrame
       title="Sign in to Achar"
-      redirectTo={redirectTo}
+      description="Your projects, their datasets, and the content in them."
       footer={
         <>
           No account yet?{' '}
@@ -65,6 +64,8 @@ export function SignInForm() {
           </Link>
         </>
       }
-    />
+    >
+      <SignIn redirectTo={redirectTo} />
+    </AuthFrame>
   );
 }
