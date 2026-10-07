@@ -28,6 +28,11 @@ export function AcharMark({ className }: { className?: string }) {
         aria-hidden="true"
         width={logo.width}
         height={logo.height}
+        // `sizes` is the width the mark is drawn at. Without it the browser is
+        // told the image is as wide as the viewport, which is how a 32-pixel
+        // logo ends up fetching a 1080-pixel one — on the critical path of every
+        // page that has a header.
+        sizes="32px"
         className="h-8 w-auto shrink-0"
       />
       <span className="text-base font-semibold tracking-tight text-foreground">Achar</span>
