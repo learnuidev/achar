@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import type { SchemaType } from '@achar/types';
 import type { SchemaIssue } from '@achar/schema';
 import { Separator, Tabs, TabsContent, TabsList, TabsTrigger } from '@achar/ui';
 import { fieldGroups, hasGroups, hasIssueAt, issuesAt, localizedFieldCount, visibleFields } from '@/lib/schema';
 import { languageName } from '@/lib/language';
+import { routes } from '@/lib/routes';
 import { FieldControl } from '@/components/editor/field-controls';
 
 /**
@@ -109,7 +111,9 @@ export function DocumentForm({
 
   return (
     <div ref={container} className="space-y-6">
-      {language !== defaultLanguage && <LanguageLane type={type} language={language} />}
+      {language !== defaultLanguage && (
+        <LanguageLane type={type} language={language} schemaHref={routes.schema(projectId, dataset)} />
+      )}
 
       {tabbed ? (
         <Tabs defaultValue={groups[0]?.name}>
@@ -177,7 +181,16 @@ export function DocumentForm({
  * document is written in first, and a note about it would be noise on the one screen
  * where nothing is surprising.
  */
-function LanguageLane({ type, language }: { type: SchemaType; language: string }) {
+function LanguageLane({
+  type,
+  language,
+  schemaHref,
+}: {
+  type: SchemaType;
+  language: string;
+  /** Where a field is made translatable — the type's own schema screen. */
+  schemaHref: string;
+}) {
   const translated = useMemo(() => localizedFieldCount(type), [type]);
 
   if (translated === 0) {
@@ -188,8 +201,12 @@ function LanguageLane({ type, language }: { type: SchemaType; language: string }
         </span>{' '}
         Switching language changes nothing here: every field below is the same in all of them,
         including whatever is typed while this one is on screen. A field becomes translatable
-        when the schema writes it as <span className="font-mono">Localized&lt;…&gt;</span>, which
-        is done on the schema screen.
+        when the schema writes it as <span className="font-mono">Localized&lt;…&gt;</span> — which
+        is a click on each field of{' '}
+        <Link href={schemaHref} className="text-foreground underline">
+          this type&rsquo;s schema
+        </Link>
+        .
       </div>
     );
   }

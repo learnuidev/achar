@@ -27,6 +27,7 @@ import {
   jsonBody,
   listField,
   pathParam,
+  stringField,
   withHandler,
   type ApiEvent,
 } from '../../lib/http';
@@ -52,7 +53,8 @@ async function main(event: ApiEvent) {
   const access = await requireDatasetAccess(projectId, dataset, viewer, 'write');
 
   const body = jsonBody(event);
-  const mutations = assertMutations(listField(body, 'mutations') ?? []);
+  const language = stringField(body, 'language');
+  const mutations = withLanguage(assertMutations(listField(body, 'mutations') ?? []), language);
   const atomic = booleanField(body, 'atomic') ?? false;
 
   // The languages a mutation may write in, checked once for the batch: a language
@@ -121,6 +123,37 @@ async function main(event: ApiEvent) {
   await notify(projectId, dataset, applied.results);
 
   return json({ results: applied.results, transactionId: applied.transactionId });
+}
+
+/**
+ * The batch's language, given to every mutation that does not name one.
+ *
+ * A client editing a document *in French* has one thing to say about language, and
+ * saying it once is not only shorter — it is harder to get wrong: a batch that named
+ * the language on four elements out of five would write one field into the default
+ * language, which is a document half in French and half in English with nothing in the
+ * request to show for it. An element that names its own keeps it, so a client that
+ * genuinely writes two languages in one request can still do that.
+ *
+ * `publish`, `unpublish`, `delete`, `restore` and `approve` name no language: they act
+ * on a row, and a row is every language at once.
+ */
+function withLanguage(mutations: DocumentMutation[], language: string | undefined): DocumentMutation[] {
+  if (!language) return mutations;
+
+  return mutations.map((mutation) => {
+    const body = mutation.create ?? mutation.createOrReplace ?? mutation.createIfNotExists ?? mutation.patch;
+    if (!body || body._language) return mutation;
+
+    if (mutation.create) return { create: { ...mutation.create, _language: language } };
+    if (mutation.createOrReplace) {
+      return { createOrReplace: { ...mutation.createOrReplace, _language: language } };
+    }
+    if (mutation.createIfNotExists) {
+      return { createIfNotExists: { ...mutation.createIfNotExists, _language: language } };
+    }
+    return { patch: { ...mutation.patch!, _language: language } };
+  });
 }
 
 /**

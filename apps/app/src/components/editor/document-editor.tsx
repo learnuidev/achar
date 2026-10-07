@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { SchemaType } from '@achar/types';
 import { Skeleton } from '@achar/ui';
-import { initialDocument, isLanguageMap, languageValue, resolveLanguages, validateDocument } from '@achar/schema';
+import {
+  changedPaths,
+  initialDocument,
+  isLanguageMap,
+  languageValue,
+  resolveLanguages,
+  validateDocument,
+} from '@achar/schema';
 import { useAcharClient } from '@/components/client-provider';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ErrorNote } from '@/components/ui/empty-state';
@@ -178,15 +185,66 @@ export function DocumentEditor({
     // there would be lying about the exact thing it exists to report.
     const written = value;
 
+    /**
+     * **What changed, grouped by the language it changed in.**
+     *
+     * The save used to send the whole document back, and that is what made editing one
+     * language change another: a patch *replaces* the value at the path it names, so
+     * `set: { title: { en: "…", fr: "…" } }` replaced the English value with whatever
+     * copy this form happened to be holding — a stale one, or none at all — while the
+     * person was only editing the French. Writing the difference, one language at a
+     * time and naming the language, means a save can only reach the language that was
+     * edited. See `changedPaths`.
+     *
+     * The comparison is against the document this form was filled from, so what is
+     * written is exactly what the person changed — not what the table holds now, which
+     * they have never seen.
+     */
+    const loaded = shown ?? published;
+    const changes = changedPaths(type, value, loaded ? contentOf(loaded) : null);
+
+    const patches = [
+      ...changes.languages.map((entry) => ({
+        patch: {
+          id: draftId,
+          set: entry.set,
+          ...(entry.unset.length > 0 ? { unset: entry.unset } : {}),
+          // The one field that keeps this patch out of every other language.
+          _language: entry.language,
+        },
+      })),
+      ...(Object.keys(changes.shared.set).length > 0 || changes.shared.unset.length > 0
+        ? [
+            {
+              patch: {
+                id: draftId,
+                set: changes.shared.set,
+                ...(changes.shared.unset.length > 0 ? { unset: changes.shared.unset } : {}),
+              },
+            },
+          ]
+        : []),
+    ];
+
+    // Nothing to write: a form that was edited and edited back is not a write, and a
+    // document that already has a draft does not need one made for it.
+    if (patches.length === 0 && (shown !== null || published !== null)) {
+      setDirty(false);
+      setSaveState('saved');
+      setSavedAt(new Date().toISOString());
+      return true;
+    }
+
     try {
       await client.mutate(projectId, dataset, {
         mutations: [
-          // Creating the draft if it is missing, then patching it, is two
-          // mutations in one ordered batch rather than a read-then-write: the
-          // first save of a new document and the four-hundredth are the same
-          // request, and neither can clobber a field it did not touch.
-          { createIfNotExists: { _id: draftId, _type: type.name } },
-          { patch: { id: draftId, set: contentOf(value) } },
+          // A document that is in neither row is created first, and only then: on a
+          // document that already has the published row, making an *empty* draft would
+          // throw its content away — the patch is what builds the draft from it.
+          ...(shown === null && published === null
+            ? [{ createIfNotExists: { _id: draftId, _type: type.name } }]
+            : []),
+          ...patches,
         ],
         atomic: true,
       });
@@ -203,7 +261,7 @@ export function DocumentEditor({
       setSaveError(errorMessage(cause, 'Could not save the draft'));
       return false;
     }
-  }, [canEdit, client, projectId, dataset, draftId, type.name, value, pair.refresh]);
+  }, [canEdit, client, projectId, dataset, draftId, type, value, pair.refresh, shown, published]);
 
   // Held in a ref so the keyboard shortcuts — and the publish that saves first —
   // always call the newest closure without re-registering listeners.

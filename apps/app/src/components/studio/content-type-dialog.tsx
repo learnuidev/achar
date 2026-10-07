@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CheckIcon, Loader2Icon, SparklesIcon, WandSparklesIcon } from 'lucide-react';
+import { CheckIcon, LanguagesIcon, Loader2Icon, SparklesIcon, WandSparklesIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   humanise,
@@ -89,6 +89,27 @@ export function ContentTypeDialog({
     setSource(type ? printTypeDeclaration(type) : START);
     setSample('');
     save.reset();
+  }
+
+  /**
+   * One field, between a value per language and one shared value.
+   *
+   * The declaration is reprinted rather than edited in place, because the printer is
+   * the parser's own inverse: what comes back is what Achar understood, spelled the
+   * way Achar writes it. That is the same act as the sample tab's, and it is why the
+   * two live here together — this form edits one text, by three routes.
+   */
+  function toggleLocalized(name: string) {
+    setSource(
+      printTypeDeclaration({
+        name: parsed.name,
+        title: parsed.title,
+        kind,
+        fields: parsed.fields.map((field) =>
+          field.name === name ? { ...field, localized: field.localized !== true } : field,
+        ),
+      }),
+    );
   }
 
   /**
@@ -246,7 +267,12 @@ export function ContentTypeDialog({
                   ))}
                 </ul>
               ) : (
-                <ParsedFields fields={parsed.fields} />
+                <ParsedFields
+                  fields={parsed.fields}
+                  kind={kind}
+                  canToggle={clean}
+                  onToggleLocalized={toggleLocalized}
+                />
               )}
             </TabsContent>
 
@@ -296,15 +322,46 @@ export function ContentTypeDialog({
  * A type with no fields in it is a form with nothing to fill in, so the editor
  * opens on the shape of the thing rather than on an empty box: what a person has
  * to do next is delete and rename lines, which is easier than remembering syntax.
+ *
+ * **And it shows the one distinction a document form cannot show.** `Localized<…>`
+ * is a field that holds one value per language; everything else holds one value that
+ * every language shares. Nothing in a filled-in form reveals which of the two a field
+ * is — so somebody switches to French in the editor, finds the fields unchanged, and
+ * concludes the translation is broken, when in fact they have just edited the title
+ * in every language at once. The template therefore opens with one of each, saying
+ * which is which.
  */
 const START = `type Untitled = {
-  title: string;
+  /** Title, per language — Localized<…> is what makes a field translatable. */
+  title: Localized<string>;
+  /** Slug, one value — a URL segment is not prose, and every language shares it. */
+  slug: string;
   /** Write the fields this document has. */
-  body: text;
+  body: Localized<text>;
 }`;
 
-/** What Achar understood, so that the text and the schema are visibly the same thing. */
-function ParsedFields({ fields }: { fields: SchemaType['fields'] }) {
+/**
+ * What Achar understood, so that the text and the schema are visibly the same thing.
+ *
+ * **The last chip is a button**, because "does this field hold one value per language"
+ * is a decision about content, and `Localized<…>` is syntax nobody should have to know
+ * to make it. Flipping one re-prints the declaration — the same round trip the sample
+ * tab already performs, and the reason the parser and the printer are a pair — and it
+ * is offered only while the text reads cleanly, since re-printing a half-understood
+ * declaration would quietly drop the part Achar could not parse.
+ */
+function ParsedFields({
+  fields,
+  kind,
+  canToggle,
+  onToggleLocalized,
+}: {
+  fields: SchemaType['fields'];
+  kind: SchemaType['kind'];
+  canToggle: boolean;
+  /** Flips one field between a value per language and a single shared value. */
+  onToggleLocalized: (name: string) => void;
+}) {
   if (fields.length === 0) {
     return <p className="text-xs text-muted-foreground">No fields yet — a document of this is only its id.</p>;
   }
@@ -319,6 +376,30 @@ function ParsedFields({ fields }: { fields: SchemaType['fields'] }) {
           <span className="font-mono text-foreground">{field.name}</span>
           <TypeBadge name={field.type} />
           {field.required === false && <span className="text-muted-foreground">optional</span>}
+
+          <button
+            type="button"
+            aria-pressed={field.localized === true}
+            disabled={!canToggle}
+            onClick={() => onToggleLocalized(field.name)}
+            title={
+              !canToggle
+                ? 'Achar has to be able to read the declaration before it can change it'
+                : field.localized
+                  ? 'One value per language. Click to make it one value shared by every language.'
+                  : 'One value, shared by every language. Click to make it one value per language.'
+            }
+            className={cn(
+              'inline-flex items-center gap-1 rounded px-1 transition-colors',
+              field.localized
+                ? 'bg-primary/10 font-medium text-primary'
+                : 'text-muted-foreground hover:text-foreground',
+              !canToggle && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <LanguagesIcon className="size-3" />
+            {field.localized ? 'translated' : 'one value'}
+          </button>
         </span>
       ))}
     </div>

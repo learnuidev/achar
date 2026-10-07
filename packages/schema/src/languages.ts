@@ -326,6 +326,105 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * What a save has to write, **grouped by the language it is writing**.
+ *
+ * This is the shape a mutation wants, and the reason for it is the whole bug class it
+ * removes. A patch's `set` *replaces* the value at the path it names, so a client that
+ * sends a field's whole map — `set: { title: { en: '…', fr: '…' } }` — replaces every
+ * language the map happens to hold: a language the client did not have is deleted, and
+ * a language whose copy had gone stale is overwritten with it. Both are silent, and
+ * both look exactly like "editing French changed the English".
+ *
+ * So a localized field is written **one language at a time**, naming the language the
+ * write is in rather than the map: `{ set: { title: 'Bonjour' }, _language: 'fr' }` is
+ * one language and cannot touch another. This function answers what those writes are,
+ * by comparing the document in hand with the one it was loaded from — what a person
+ * changed is what differs from what they were shown.
+ *
+ * A field that holds one value is grouped separately, because it has no language to be
+ * in: replacing it is what editing it means.
+ */
+export interface ChangedPaths {
+  /**
+   * One entry per language, in the order they were found: the fields to write in that
+   * language, and the paths to remove from it. A path is the *field's* — `title`,
+   * `seo.note` — because the language travels beside it.
+   */
+  languages: { language: string; set: Record<string, unknown>; unset: string[] }[];
+  /** Fields that hold one value, which every language reads. */
+  shared: { set: Record<string, unknown>; unset: string[] };
+}
+
+export function changedPaths(
+  type: SchemaType,
+  next: Record<string, unknown>,
+  before: Record<string, unknown> | null,
+): ChangedPaths {
+  const changed: ChangedPaths = { languages: [], shared: { set: {}, unset: [] } };
+  compareInto(type.fields, next, before ?? {}, '', changed);
+  return changed;
+}
+
+function compareInto(
+  fields: SchemaField[],
+  next: Record<string, unknown> | undefined,
+  before: Record<string, unknown> | undefined,
+  prefix: string,
+  changed: ChangedPaths,
+): void {
+  if (!next) return;
+
+  for (const field of fields) {
+    // A field the form does not hold is not a field being cleared: the form draws the
+    // schema's fields, so an absent one is a schema that moved, not a deletion.
+    if (!(field.name in next)) continue;
+
+    const path = prefix ? `${prefix}.${field.name}` : field.name;
+    const after = next[field.name];
+    const was = before?.[field.name];
+
+    if (field.localized) {
+      compareLanguages(path, after, was, changed);
+      continue;
+    }
+
+    if (field.type === 'object' && isRecord(after)) {
+      compareInto(field.fields ?? [], after, isRecord(was) ? was : undefined, path, changed);
+      continue;
+    }
+
+    if (!sameValue(after, was)) changed.shared.set[path] = after;
+  }
+}
+
+/** One language's slot at a time, for a field that holds several. */
+function compareLanguages(path: string, after: unknown, was: unknown, changed: ChangedPaths): void {
+  const map = isLanguageMap(after) ? after : {};
+  const previous = isLanguageMap(was) ? was : {};
+
+  for (const language of new Set([...Object.keys(map), ...Object.keys(previous)])) {
+    const value = map[language];
+    if (sameValue(value, previous[language])) continue;
+
+    const entry = languageEntry(language, changed);
+    if (value === undefined) entry.unset.push(path);
+    else entry.set[path] = value;
+  }
+}
+
+function languageEntry(
+  language: string,
+  changed: ChangedPaths,
+): { language: string; set: Record<string, unknown>; unset: string[] } {
+  const found = changed.languages.find((entry) => entry.language === language);
+  if (found) return found;
+
+  const entry = { language, set: {}, unset: [] };
+  changed.languages.push(entry);
+  return entry;
+}
+
+/**
  * The languages whose values differ between two versions of a document.
  *
  * This is what makes an approval mean something. An approval is of a particular

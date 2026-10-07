@@ -601,6 +601,21 @@ export interface MutationRequest {
   mutations: DocumentMutation[];
   /** Fail the whole batch rather than applying what can be applied. */
   atomic?: boolean;
+  /**
+   * The language every mutation in this batch is written in, unless it names its own.
+   *
+   * A client saving a document it is *editing in French* says so once here rather than
+   * on every element, and the API routes each plain value into that language's slot:
+   * `{ "mutations": [{"patch": {"id": "post-1", "set": {"title": "Bonjour"}}}], "_language": "fr" }`
+   * is a French title and cannot touch the English one.
+   *
+   * **This is the field that keeps a save from overwriting another language.** A patch
+   * *replaces* the value at the path it names, so a client that sends a field's whole
+   * map instead — `set: { title: { en: "…", fr: "…" } }` — replaces every language that
+   * map holds, including one it read a while ago and one it never had. Saying which
+   * language is being written means the write can only reach that one.
+   */
+  language?: string;
 }
 
 export interface MutationResponse {
