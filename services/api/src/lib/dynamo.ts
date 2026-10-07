@@ -11,6 +11,16 @@
  * so the infra grants each index explicitly. Nothing here can check that, which
  * is exactly why it is written down: a route that starts using `IdIndex` and
  * answers 500 in a deployed environment is a missing grant, not a missing row.
+ *
+ * **A `null` is not an absence, and for an index key that difference is a failed
+ * write.** `removeUndefinedValues` keeps an `undefined` field out of the item,
+ * but `null` survives marshalling as a NULL-typed value, and DynamoDB counts a
+ * NULL as the attribute being there. Every global secondary index here is sparse
+ * — a row is in it or not by whether it carries the hash key — so an item that
+ * sets that key to `null` is not excluded from the index, it is rejected by it:
+ * `Type mismatch for Index Key … Expected: S Actual: NULL`. The fix is never to
+ * write the field, which is why the writers below pass `...(x ? {x} : {})` for an
+ * optional attribute that any index hashes.
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';

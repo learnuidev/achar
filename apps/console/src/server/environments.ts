@@ -380,12 +380,16 @@ export async function stageOutputs(
   }
 
   const region = ctx.region ?? readConfig(stage)?.region ?? defaultRegion();
+  // The pool's domain as a hostname, converted once here rather than by each
+  // reader: everything downstream of this function is looking at a value a person
+  // or a browser is meant to use, and only the raw stack output is a prefix.
+  const cognitoHost = hostedUiHost(cognitoDomain, region);
   const env = frontendEnvValues(
     {
       apiUrl,
       userPoolId,
       userPoolClientId,
-      cognitoDomain,
+      cognitoDomain: cognitoHost,
       region,
     },
     region,
@@ -400,7 +404,7 @@ export async function stageOutputs(
     cloudFrontDistributionId,
     userPoolId,
     userPoolClientId,
-    cognitoDomain,
+    cognitoDomain: cognitoHost,
     googleSignInEnabled,
     googleCallbackUrl: auth?.outputs.GoogleCallbackUrl ?? null,
     webhookQueueUrl: webhook?.outputs.WebhookQueueUrl ?? null,
@@ -445,12 +449,47 @@ export interface FrontendEnvSource {
 }
 
 /**
+ * The Hosted UI **hostname**, from a pool's domain — which is a prefix.
+ *
+ * `AcharAuthStack`'s `UserPoolDomain` output is the `Domain` property Cognito was
+ * created with, and for a Cognito domain that is a prefix: `achar-dev-765302404291`.
+ * Reaching the Hosted UI takes the hostname instead —
+ * `<prefix>.auth.<region>.amazoncognito.com` — and the two differ by the one part
+ * nothing complains about until a browser tries to open the shorter one:
+ *
+ *   https://achar-dev-765302404291/oauth2/authorize?…  →  DNS_PROBE_FINISHED_NXDOMAIN
+ *
+ * So the conversion happens where the value leaves this server, and every place
+ * that needs a hostname asks for one here: the frontend's `.env.local` (an app
+ * hands this string to Amplify, which builds `https://<value>/oauth2/authorize`
+ * out of it), the environment card, and the deploy result. The settings form
+ * wants the same hostname, which is why the rule lives here rather than beside
+ * the form that first needed it.
+ *
+ * It accepts **either shape**, because the source varies: a Cognito-domain stack
+ * output is a prefix, a pool with a custom domain reports the whole name, and a
+ * config that imports a pool carries whichever the person who wrote it had. A
+ * value containing a dot is already a hostname — a Cognito prefix cannot contain
+ * one — so calling this twice is the same as calling it once.
+ */
+export function hostedUiHost(prefixOrHost: string | null | undefined, region: string): string | null {
+  if (!prefixOrHost) return null;
+  return prefixOrHost.includes('.') ? prefixOrHost : `${prefixOrHost}.auth.${region}.amazoncognito.com`;
+}
+
+/**
  * The five names, filled in from a stage's outputs.
  *
  * A value with no output behind it is **left out** rather than written empty: an
  * app that finds `NEXT_PUBLIC_ACHAR_AUTH_DOMAIN=` set to nothing takes it as
  * configured and fails at sign-in, where one that finds the key absent can fall
  * back to its own default.
+ *
+ * `NEXT_PUBLIC_ACHAR_AUTH_DOMAIN` is a **hostname**, and it is the one value here
+ * that a stack output does not already have the right shape for: see
+ * `hostedUiHost`. Written as a prefix, sign-in fails in the browser — the Hosted
+ * UI is redirected to at a host that does not exist — and nothing before that
+ * point says why.
  */
 export function frontendEnvValues(
   source: FrontendEnvSource,
@@ -461,7 +500,8 @@ export function frontendEnvValues(
   values.NEXT_PUBLIC_ACHAR_REGION = region;
   if (source.userPoolId) values.NEXT_PUBLIC_ACHAR_USER_POOL_ID = source.userPoolId;
   if (source.userPoolClientId) values.NEXT_PUBLIC_ACHAR_USER_POOL_CLIENT_ID = source.userPoolClientId;
-  if (source.cognitoDomain) values.NEXT_PUBLIC_ACHAR_AUTH_DOMAIN = source.cognitoDomain;
+  const cognitoHost = hostedUiHost(source.cognitoDomain, region);
+  if (cognitoHost) values.NEXT_PUBLIC_ACHAR_AUTH_DOMAIN = cognitoHost;
   return values;
 }
 
@@ -577,7 +617,11 @@ export function environmentView(
     apiUrl: outputs.ApiUrl ?? null,
     userPoolId: outputs.UserPoolId ?? null,
     userPoolClientId: outputs.UserPoolClientId ?? null,
-    cognitoDomain: outputs.UserPoolDomain ?? null,
+    // Shown beside the API host on the environment card, so it is the hostname
+    // rather than the prefix the output carries: a card that names a Hosted UI
+    // domain and prints the string that does not resolve is how the same mistake
+    // gets made twice.
+    cognitoDomain: hostedUiHost(outputs.UserPoolDomain, region),
     googleSignInEnabled: outputs.GoogleSignInEnabled === "true",
   };
 }

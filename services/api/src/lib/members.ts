@@ -43,8 +43,17 @@ export interface MemberRow extends Item {
   name?: string | null;
   role: ProjectRole;
   status: MemberStatus;
-  /** What the invitation was *for*, kept after it is accepted. */
-  invitedEmail?: string | null;
+  /**
+   * What the invitation was *for*, kept after it is accepted.
+   *
+   * There is deliberately no `| null` here. This is the hash key of
+   * `InviteEmailIndex`, and a row leaves that index by not having the attribute
+   * rather than by setting it to nothing — a stored NULL still counts as present
+   * and DynamoDB rejects it against an `S` index key. See the header of
+   * `dynamo.ts`. A membership that was never an invitation simply omits it, and
+   * `toApiMember` answers `null` for the API either way.
+   */
+  invitedEmail?: string;
   invitedBy?: string | null;
   invitedAt: string;
   joinedAt?: string | null;

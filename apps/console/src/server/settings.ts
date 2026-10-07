@@ -11,6 +11,7 @@ import {
   configProblems,
   consoleDefaults,
   googleClientSecretName,
+  hostedUiHost,
   listStages,
   newStageConfig,
   ownershipOf,
@@ -165,8 +166,11 @@ async function secretStored(
  *
  * `AcharAuthStack`'s `UserPoolDomain` is the **domain prefix** —
  * `achar-<stage>-<account>` — because that is what Cognito is given at creation
- * and what the stack's own `GoogleCallbackUrl` is built from. So the hostname is
- * assembled here, exactly as `auth-stack.ts` assembles it, and the assembled
+ * and what the stack's own `GoogleCallbackUrl` is built from. Turning it into the
+ * hostname Google has to be told about is `hostedUiHost`, in `environments.ts`,
+ * and it is shared with the frontend's `.env.local` rather than written twice:
+ * the app is handed the same hostname, and the one time the two drifted, the app
+ * was handed the prefix and the browser could not resolve it. The assembled
  * callback is used when the stack published one: a name that appeared in both
  * places would otherwise be a second answer to "which URL does Google call".
  *
@@ -184,14 +188,18 @@ export async function googleOAuthValues(
 
   const region = config?.region ?? ctx.region ?? consoleDefaults().region;
   const owner = config?.account ?? account ?? null;
-  const prefix =
+  // `stageOutputs` already hands back a hostname, and the two fallbacks are a
+  // prefix — `hostedUiHost` takes either, which is what lets this read the same
+  // as the environment card and the frontend's `.env.local`.
+  const host = hostedUiHost(
     outputs?.cognitoDomain ??
-    config?.existing?.userPoolDomain ??
-    (owner ? `achar-${stage}-${owner}` : null);
+      config?.existing?.userPoolDomain ??
+      (owner ? `achar-${stage}-${owner}` : null),
+    region,
+  );
 
-  if (!prefix) return { cognitoDomain: null, javaScriptOrigin: null, redirectUri: null };
+  if (!host) return { cognitoDomain: null, javaScriptOrigin: null, redirectUri: null };
 
-  const host = `${prefix}.auth.${region}.amazoncognito.com`;
   return {
     cognitoDomain: host,
     javaScriptOrigin: `https://${host}`,

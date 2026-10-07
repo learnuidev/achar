@@ -114,7 +114,13 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
     name: input.ownerName ?? null,
     role: 'ADMIN',
     status: 'ACTIVE',
-    invitedEmail: null,
+    // No `invitedEmail`, and its absence is the point rather than an omission.
+    // The owner was never invited, and `InviteEmailIndex` is sparse: a row stays
+    // out of it by not having the attribute at all. Writing `null` here does not
+    // say that — the document client marshals it to a NULL-typed value, which
+    // DynamoDB counts as present and then refuses, because the index's hash key
+    // is declared `S`. The write fails with a type mismatch on the index key and
+    // takes the whole transaction with it, so this project is never created.
     invitedBy: null,
     invitedAt: now,
     joinedAt: now,
