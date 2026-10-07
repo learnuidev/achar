@@ -38,17 +38,18 @@ export default function DatasetOverviewPage({
   if (types.length === 0) {
     return (
       <div className="space-y-6 p-6">
-        <PageHeader title={dataset} description="This dataset's schema declares no document types." />
+        <PageHeader
+          title={dataset}
+          description="This dataset has no content types yet, so there is nothing to list or author."
+        />
         <EmptyState
           icon={<LayersIcon className="size-5" />}
           title="Nothing to author yet"
           description={
             <>
-              A dataset is authored against a schema, and this one declares no types of kind{' '}
-              <span className="font-mono">document</span> — so there is no list of anything. The
-              schema is read-only here; write it with{' '}
-              <span className="font-mono">PUT /v1/projects/{projectId}/datasets/{dataset}/schema</span>{' '}
-              or by seeding the dataset.
+              A dataset is whatever its schema says it is, and this one has not been told. Define a
+              content type on the schema screen — a name, an icon, and the fields a document of it has
+              — and this page fills in with its list, its counts and its editor.
             </>
           }
           action={
@@ -56,7 +57,7 @@ export default function DatasetOverviewPage({
               href={routes.schema(projectId, dataset)}
               className="text-sm text-primary underline"
             >
-              Look at the schema
+              Define a content type
             </Link>
           }
         />

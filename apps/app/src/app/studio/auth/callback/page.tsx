@@ -15,7 +15,7 @@ export default function AuthCallbackPage() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6 py-12">
       <div className="flex w-full max-w-md flex-col items-center gap-6">
-        <AcharMark className="size-9" />
+        <AcharMark className="h-9" />
         <Card className="w-full">
           <CardContent className="pt-6">
             <OAuthCallback />

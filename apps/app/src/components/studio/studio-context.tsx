@@ -23,6 +23,14 @@ export interface StudioContextValue {
   schema: DatasetSchema;
   /** The types a person can list — the documents, not the objects. */
   types: SchemaType[];
+  /**
+   * Re-read the schema, after something wrote one.
+   *
+   * Every screen under here is drawn from `schema`, including the rail, so a
+   * screen that saves a schema has to say so or it will keep drawing the types it
+   * was opened with — a type editor that appears to have done nothing.
+   */
+  refreshSchema: () => void;
   /** The caller may write content here. */
   canEdit: boolean;
   /** The caller may manage the project and its people. */
@@ -37,6 +45,7 @@ export function StudioProvider({
   datasetInfo,
   schema,
   types,
+  refreshSchema,
   children,
 }: {
   project: Project;
@@ -44,6 +53,7 @@ export function StudioProvider({
   datasetInfo?: Dataset | null;
   schema: DatasetSchema;
   types: SchemaType[];
+  refreshSchema: () => void;
   children: ReactNode;
 }) {
   const value = useMemo<StudioContextValue>(
@@ -54,10 +64,11 @@ export function StudioProvider({
       datasetInfo: datasetInfo ?? null,
       schema,
       types,
+      refreshSchema,
       canEdit: canEdit(project.role),
       canAdmin: canAdmin(project.role),
     }),
-    [project, dataset, datasetInfo, schema, types],
+    [project, dataset, datasetInfo, schema, types, refreshSchema],
   );
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

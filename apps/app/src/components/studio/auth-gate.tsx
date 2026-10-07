@@ -95,7 +95,7 @@ function GateSkeleton() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background">
       <div className="flex w-full max-w-md flex-col items-center gap-4 px-6">
-        <AcharMark className="size-8" />
+        <AcharMark className="h-8" />
         <Skeleton className="h-4 w-40 rounded-md" />
         <Skeleton className="h-48 w-full rounded-2xl" />
       </div>
@@ -122,7 +122,7 @@ export function SignInFrame({
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6 py-12">
       <div className="flex w-full max-w-md flex-col items-center gap-6">
         <div className="flex flex-col items-center gap-3 text-center">
-          <AcharMark className="size-9" />
+          <AcharMark className="h-9" />
           <div className="space-y-1">
             <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
             <p className="text-sm text-muted-foreground">{description}</p>

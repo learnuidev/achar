@@ -93,6 +93,16 @@ function normalize(name: string): string {
     .replace(/-(\d+)$/, '$1');
 }
 
+/**
+ * Every name this map knows, for the icon picker.
+ *
+ * The picker offers what the studio can actually draw, rather than a text field
+ * somebody types a name into: the map is the contract, and an icon outside it
+ * falls back to a plain document — which is a fine answer for a schema written by
+ * hand and a bad one for a form that asked you to choose.
+ */
+export const ICON_NAMES: readonly string[] = Object.keys(ICONS).sort();
+
 export function iconFor(name: string | undefined | null): LucideIcon {
   if (!name) return FileTextIcon;
   return ICONS[normalize(name)] ?? FileTextIcon;

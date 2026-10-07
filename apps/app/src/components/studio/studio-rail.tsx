@@ -51,7 +51,10 @@ export function StudioRail({ datasets }: { datasets: { datasetName: string }[] }
         >
           <ChevronLeftIcon className="size-4" />
         </Link>
-        <AcharMark className="size-6" />
+        {/* A 240-pixel rail whose neighbours are a back button and a project name:
+            the flame is the brand here, and the project name beside it is the one
+            name this row has room to say. */}
+        <AcharMark name={false} className="h-6" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{project.name}</p>
           <p className="truncate text-xs text-muted-foreground">{project.slug}</p>
@@ -95,7 +98,11 @@ export function StudioRail({ datasets }: { datasets: { datasetName: string }[] }
 
         {types.length === 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground">
-            This dataset&rsquo;s schema declares no document types yet.
+            No content types yet.{' '}
+            <Link href={routes.schema(project.projectId, dataset)} className="text-primary underline">
+              Define one
+            </Link>
+            .
           </p>
         )}
 

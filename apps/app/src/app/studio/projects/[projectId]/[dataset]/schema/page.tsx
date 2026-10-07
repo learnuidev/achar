@@ -1,10 +1,11 @@
 'use client';
 
 import { use } from 'react';
-import { FileTextIcon } from 'lucide-react';
+import { FileTextIcon, PencilIcon } from 'lucide-react';
 import type { SchemaField, SchemaOrdering, SchemaType } from '@achar/types';
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@achar/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@achar/ui';
 import { TypeBadge } from '@/components/studio/badges';
+import { ContentTypeDialog } from '@/components/studio/content-type-dialog';
 import { useStudio } from '@/components/studio/studio-context';
 import { CopyRow } from '@/components/ui/copy-row';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -14,13 +15,22 @@ import { iconFor } from '@/lib/icons';
 import { fieldTitle } from '@/lib/schema';
 
 /**
- * The schema a dataset is authored against, drawn rather than edited.
+ * The schema a dataset is authored against: what it holds, and how to change it.
  *
- * This page reads the schema out of the studio shell rather than fetching it:
- * the rail beside it is drawn from the same object, and a second read is a page
- * that can disagree with its own navigation about which types exist. Nothing
- * here writes — a schema is replaced wholesale by a new revision, so an editor
- * for it would be a form that has to rewrite every type to change one field.
+ * This page reads the schema out of the studio shell rather than fetching it: the
+ * rail beside it is drawn from the same object, and a second read is a page that
+ * can disagree with its own navigation about which types exist.
+ *
+ * **It is where content types are written**, which is the one thing this page and
+ * the rail both depend on and neither can invent: a dataset holds whatever its
+ * owner says it holds, and until somebody says, there is nothing to list, no form
+ * to draw and no query to run. So the type editor lives here — one dialog per type,
+ * opened from the header or from the type itself — and everything else on the page
+ * is a reading of what it wrote.
+ *
+ * The page still reads rather than writes: `PUT …/schema` replaces the whole list
+ * of types, so a save is a merge of one type into the stored list, and it is the
+ * dialog that does it (`mergeInto`). Nothing here holds a half-edited schema.
  */
 export default function DatasetSchemaPage({
   params,
@@ -28,7 +38,7 @@ export default function DatasetSchemaPage({
   params: Promise<{ projectId: string; dataset: string }>;
 }) {
   const { projectId, dataset } = use(params);
-  const { schema } = useStudio();
+  const { schema, canEdit, refreshSchema } = useStudio();
 
   const documents = schema.types.filter((type) => type.kind === 'document');
   const objects = schema.types.filter((type) => type.kind === 'object');
@@ -42,15 +52,16 @@ export default function DatasetSchemaPage({
         description={
           <>
             Every form in the studio is drawn from this — the rail&rsquo;s list of types, each
-            editor&rsquo;s controls, the name a list gives a document and the orderings it offers.
-            It is replaced rather than edited here:{' '}
+            editor&rsquo;s controls, the name a list gives a document and the orderings it offers. A
+            type is written as TypeScript, or read out of a sample of your data, and saving one
+            writes a whole new revision:{' '}
             <span className="font-mono">
               PUT /v1/projects/{projectId}/datasets/{dataset}/schema
-            </span>{' '}
-            writes a whole new revision, which is what every client compares to know its copy is
-            stale.
+            </span>
+            .
           </>
         }
+        actions={canEdit ? <ContentTypeDialog schema={schema} onSaved={refreshSchema} /> : undefined}
       />
 
       <CopyRow
@@ -71,14 +82,16 @@ export default function DatasetSchemaPage({
         {documents.length === 0 ? (
           <EmptyState
             icon={<FileTextIcon className="size-5" />}
-            title="No document types"
+            title="No content types yet"
             description={
               <>
-                A dataset with no type of kind <span className="font-mono">document</span> has
-                nothing to list and nothing to author — the editor has no form to draw. Write a
-                schema revision with at least one, or seed the dataset.
+                A dataset holds whatever its owner says it holds, and this one says nothing yet. Define
+                a type — a name, an icon and the fields a document of it has — and the studio draws a
+                list for it, a form to fill in, and a query to read it back. If you have a document
+                already, paste a sample of it and the fields are read from that.
               </>
             }
+            action={canEdit ? <ContentTypeDialog schema={schema} onSaved={refreshSchema} /> : undefined}
           />
         ) : (
           documents.map((type) => <TypeCard key={type.name} type={type} />)
@@ -102,8 +115,9 @@ export default function DatasetSchemaPage({
   );
 }
 
-/** One type, with everything the schema says about it. */
+/** One type, with everything the schema says about it — and the way to change it. */
 function TypeCard({ type }: { type: SchemaType }) {
+  const { schema, canEdit, refreshSchema } = useStudio();
   const Icon = iconFor(type.icon);
   const orderings = type.orderings ?? [];
   const groups = type.groups ?? [];
@@ -125,6 +139,20 @@ function TypeCard({ type }: { type: SchemaType }) {
           </div>
           {type.description && <CardDescription>{type.description}</CardDescription>}
         </div>
+
+        {canEdit && (
+          <ContentTypeDialog
+            schema={schema}
+            type={type}
+            onSaved={refreshSchema}
+            trigger={
+              <Button variant="outline" size="sm">
+                <PencilIcon />
+                Edit
+              </Button>
+            }
+          />
+        )}
       </CardHeader>
 
       <CardContent className="space-y-4">

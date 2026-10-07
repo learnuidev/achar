@@ -83,6 +83,7 @@ export function StudioShell({
       datasetInfo={datasets.data?.find((candidate) => candidate.datasetName === dataset) ?? null}
       schema={schema.data}
       types={types}
+      refreshSchema={schema.refresh}
     >
       <AssetLibraryProvider projectId={projectId} dataset={dataset}>
         <div className="flex h-svh w-full overflow-hidden bg-background">

@@ -104,8 +104,16 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
   `SchemaIssue = { path: string; message: string }`.
 - `initialDocument(type: SchemaType): Record<string, unknown>` — a new document
   with every `initialValue` applied and every required string an empty string.
-- `previewOf(type: SchemaType, document): { title: string; subtitle?: string; mediaField?: string }`.
+- `previewOf(type: SchemaType, document): { title: string; subtitle?: string; mediaField?: string }`
+  — a type that names no `preview` is listed by its `title`, `name`, or first field
+  holding words, because a type written by hand arrives with no preview at all.
 - `slugify(input: string): string`.
+- **TypeScript as a schema** (`src/ts/`), which is how a content type is authored:
+  `parseTypeDeclaration(source)` reads a declaration — `type Post = { title: string;
+  cover: Image; tags: string[] }` — into fields and reports anything outside its
+  subset as an issue with a line and column; `printTypeDeclaration(type)` writes
+  fields back out, and the pair round-trip; `inferFields(sample)` reads a pasted
+  JSON document (or a list of them) into fields and says what it had to guess.
 - `documentTypes(schema): SchemaType[]` and `fieldByPath(type, path)`.
 
 **Achar's own content model** — `defaultSchema()` returns exactly these:

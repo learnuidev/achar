@@ -4,5 +4,6 @@ export * from './initial';
 export * from './preview';
 export * from './slug';
 export * from './introspect';
+export * from './ts';
 export * from './default-schema';
 export * from './seed';

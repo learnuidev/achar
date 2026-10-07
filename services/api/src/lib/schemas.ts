@@ -1,21 +1,28 @@
 /**
  * The schema a dataset is authored against.
  *
- * A dataset that has never had one stored is not a dataset without a schema: the
- * API answers `defaultSchema()`, which is Achar's own content model. That
- * defaulting is the reason this file exists rather than a `getItem` in a
- * handler — a studio opened on a brand new dataset has to draw something, and
- * "nothing is authored here yet" is not something a form can render.
+ * **A dataset with no schema row has no content types.** It used to answer
+ * `defaultSchema()` — Achar's own marketing model, with posts and authors and
+ * pricing plans in it — and that default was the wrong answer to give anybody: a
+ * project somebody made a minute ago, holding somebody else's content model, with
+ * forms for fields they never asked for.
+ *
+ * What a dataset holds is now the dataset's own decision: the studio's type
+ * editor writes one, and the API stores it. See `packages/schema/src/ts`, which is
+ * how one gets written — as TypeScript, or from a pasted sample of data.
+ *
+ * Achar's own model still exists, in `@achar/schema`'s `defaultSchema()`, and
+ * still renders this repository's site. It is simply no longer what every new
+ * dataset starts as.
  *
  * The stored row and the answer differ in one deliberate way: `projectId` and
- * `dataset` are the ones that were asked for, not the ones the default schema
+ * `dataset` are the ones that were asked for, not the ones the stored schema
  * happens to name. A schema belongs to a dataset, and a client that cached one
- * under the wrong name would be reading Achar's content model from somebody
- * else's dataset.
+ * under the wrong name would be reading somebody else's content model.
  */
 
 import type { DatasetSchema, SchemaType } from '@achar/types';
-import { defaultSchema, previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
+import { previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
 import { createHash } from 'node:crypto';
 import { Keys, deleteItem, getItem, putItem, type Item } from './dynamo';
 import { HttpError } from './http';
@@ -33,7 +40,17 @@ export function schemaKeyOf(projectId: string, dataset: string): string {
   return `${projectId}#${dataset}`;
 }
 
-/** The schema of a dataset, stored or defaulted. Never absent. */
+/**
+ * When a schema that has never been written was written.
+ *
+ * The epoch, because `updatedAt` has to be a date and there is no true one to
+ * give: a studio that draws "last written" checks for an empty type list first, so
+ * this value is never read as a date by anything that matters. `new Date()` here
+ * would be worse — it would claim somebody had just saved it.
+ */
+const NEVER = new Date(0).toISOString();
+
+/** The schema of a dataset, stored or empty. Never absent, and never somebody else's. */
 export async function getDatasetSchema(
   projectId: string,
   dataset: string,
@@ -53,14 +70,8 @@ export async function getDatasetSchema(
     };
   }
 
-  const fallback = defaultSchema();
-  return {
-    projectId,
-    dataset,
-    types: fallback.types,
-    revision: fallback.revision,
-    updatedAt: fallback.updatedAt,
-  };
+  const types: SchemaType[] = [];
+  return { projectId, dataset, types, revision: revisionOf(types), updatedAt: NEVER };
 }
 
 /**
@@ -125,17 +136,22 @@ function canonical(value: unknown): string {
 /**
  * Refuses a schema that could not be authored against.
  *
- * Two rules only, and both of them are structural rather than editorial: names
- * have to be usable as keys in a document, and no two types may share one. A
+ * One rule and it is structural rather than editorial: a type's name has to be
+ * usable as the value of a document's `_type`, and no two types may share one. A
  * schema that is merely *odd* — a required field with no title, a reference to a
- * type that does not exist — is somebody's work in progress, and a PUT that
- * argued with it would be a validation screen the studio already has.
+ * type that does not exist, a type with no fields — is somebody's work in
+ * progress, and a PUT that argued with it would be a validation screen the studio
+ * already has.
+ *
+ * **An empty schema is allowed**, and it used to be refused. A dataset with no
+ * content types is now the state every dataset starts in rather than a mistake:
+ * its types are written by whoever owns it, and deleting the last one is how
+ * somebody starts over. A rule against it would be a rule against the only way
+ * back to an empty dataset.
  */
 function assertUsableTypes(types: SchemaType[]): void {
-  if (!Array.isArray(types) || types.length === 0) {
-    throw new HttpError(400, 'BAD_REQUEST', 'A schema must declare at least one type', {
-      field: 'types',
-    });
+  if (!Array.isArray(types)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'A schema is a list of types', { field: 'types' });
   }
 
   const seen = new Set<string>();

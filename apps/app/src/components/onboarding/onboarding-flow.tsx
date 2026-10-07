@@ -60,7 +60,7 @@ interface Building {
   icon: LucideIcon;
   /** The project name this choice suggests, until somebody types their own. */
   project: string;
-  /** Type names from Achar's default content model — see `studio-preview.tsx`. */
+  /** The content types this starting point suggests — see `studio-preview.tsx`. */
   types: readonly string[];
 }
 
@@ -71,7 +71,7 @@ const BUILDINGS: readonly Building[] = [
     description: 'Pages and posts for a company or a product.',
     icon: GlobeIcon,
     project: 'Website',
-    types: ['page', 'post'],
+    types: ['Page', 'Post'],
   },
   {
     id: 'docs',
@@ -79,7 +79,7 @@ const BUILDINGS: readonly Building[] = [
     description: 'Guides and reference pages that stay in step with the product.',
     icon: BookTextIcon,
     project: 'Product docs',
-    types: ['page'],
+    types: ['Page'],
   },
   {
     id: 'blog',
@@ -87,7 +87,7 @@ const BUILDINGS: readonly Building[] = [
     description: 'Articles with authors, categories and covers.',
     icon: NewspaperIcon,
     project: 'Blog',
-    types: ['post', 'author', 'category'],
+    types: ['Post', 'Author', 'Category'],
   },
   {
     id: 'product',
@@ -95,7 +95,7 @@ const BUILDINGS: readonly Building[] = [
     description: 'Copy and media an app reads through the API.',
     icon: AppWindowIcon,
     project: 'App content',
-    types: ['feature', 'pricingPlan', 'faq'],
+    types: ['Feature', 'Pricing plan', 'Faq'],
   },
   {
     id: 'other',
@@ -103,7 +103,7 @@ const BUILDINGS: readonly Building[] = [
     description: 'Start from the whole default model and drop what you do not want.',
     icon: SparklesIcon,
     project: '',
-    types: ['post', 'page', 'customer'],
+    types: ['Post', 'Page', 'Customer'],
   },
 ];
 
@@ -225,7 +225,7 @@ function Flow({ viewer }: { viewer: Viewer }) {
             <>
               <Question
                 title="What are you building?"
-                subtitle="This picks the project name below and the document types your dataset starts with. Everything is editable afterwards."
+                subtitle="This picks the project name below, and which content types are worth making first. You write them in the studio — from a sample of your data, if you have one."
               />
               <div className="mt-6 grid gap-2 sm:grid-cols-2">
                 {BUILDINGS.map((option) => {
@@ -443,7 +443,7 @@ function OnboardingBar({ viewer, note }: { viewer: Viewer; note: string | null }
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border/50 px-6">
-      <AcharMark className="size-8" />
+      <AcharMark className="h-8" />
 
       <div className="flex items-center gap-3">
         {note && (
@@ -501,7 +501,7 @@ function Waiting() {
   return (
     <div className="flex min-h-svh items-center justify-center bg-background">
       <div className="flex w-full max-w-md flex-col items-center gap-4 px-6">
-        <AcharMark className="size-8" />
+        <AcharMark className="h-8" />
         <Skeleton className="h-4 w-40 rounded-md" />
         <Skeleton className="h-40 w-full rounded-2xl" />
       </div>

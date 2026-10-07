@@ -44,9 +44,13 @@ export function SiteHeader({
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-4 sm:px-6">
         {/* The mark carries the name, so nothing here repeats it — `AcharMark` is
-            the wordmark, and it is not content: a brand is not a document field. */}
+            the wordmark, and it is not content: a brand is not a document field.
+            The name starts at `sm`, where the bar stops carrying a hamburger and
+            starts carrying the nav: below that the flame is the whole mark, and a
+            bar with a menu button, a theme toggle and a call to action in it has
+            no room to also spell the product out. */}
         <Link href="/" aria-label="Achar, home">
-          <AcharMark />
+          <AcharMark nameClassName="hidden sm:inline" />
         </Link>
 
         <SiteNav />

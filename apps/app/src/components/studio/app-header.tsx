@@ -21,8 +21,11 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
   return (
     <header className="flex h-14 items-center justify-between gap-4 border-b border-border bg-card px-4">
       <div className="flex min-w-0 items-center gap-3">
+        {/* The flame alone: this row already says "Achar Studio" in words, and a
+            wordmark beside that label is the same name written twice, overlapping
+            in the space the project name beside it also has to fit in. */}
         <Link href="/" className="flex items-center gap-2">
-          <AcharMark className="size-6" />
+          <AcharMark name={false} className="h-6" />
           <span className="text-sm font-medium">Achar Studio</span>
         </Link>
         {children}

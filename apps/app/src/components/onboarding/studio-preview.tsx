@@ -1,6 +1,5 @@
-import { defaultSchema, documentTypes } from '@achar/schema';
+import { BookTextIcon, FileTextIcon, ImageIcon, LayersIcon, UserIcon } from 'lucide-react';
 import { AcharMark, cn } from '@achar/ui';
-import { iconFor } from '@/lib/icons';
 
 /**
  * The project the flow is making, drawn a piece at a time.
@@ -19,11 +18,22 @@ import { iconFor } from '@/lib/icons';
  * out by hand in this file would be a preview of something that does not exist.
  */
 
-/** The document types of the default model, by name, in the order asked for. */
-function typesNamed(names: readonly string[]) {
-  const model = documentTypes(defaultSchema());
-  return names.flatMap((name) => model.filter((type) => type.name === name));
-}
+/**
+ * The kinds of content a starting point usually means.
+ *
+ * These are *suggestions*, and the panel says so: nothing is written until the
+ * person writes it, because a dataset no longer arrives with somebody else's
+ * content model in it. What the choice above decides is which types are worth
+ * making first — and the icon is a stand-in, since the real one is chosen when the
+ * type is.
+ */
+const SUGGESTED_ICONS: Record<string, typeof FileTextIcon> = {
+  Page: FileTextIcon,
+  Post: BookTextIcon,
+  Author: UserIcon,
+  Category: LayersIcon,
+  Media: ImageIcon,
+};
 
 export interface StudioPreviewProps {
   /** The project's organization, or empty while it is still being asked for. */
@@ -32,12 +42,12 @@ export interface StudioPreviewProps {
   projectName: string;
   /** The dataset's name, once the flow has got that far — `null` before then. */
   dataset: string | null;
-  /** The document types this dataset starts with, from what was picked first. */
+  /** The content types this starting point suggests, in the order they are worth making. */
   types: readonly string[];
 }
 
 export function StudioPreview({ organization, projectName, dataset, types }: StudioPreviewProps) {
-  const shown = typesNamed(types);
+  const shown = types;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -59,7 +69,7 @@ export function StudioPreview({ organization, projectName, dataset, types }: Stu
 
       {shown.length === 0 ? (
         <div className="flex min-h-80 flex-col items-center justify-center gap-3 px-6 text-center">
-          <AcharMark className="size-8 opacity-40" />
+          <AcharMark className="h-8 opacity-40" />
           <p className="max-w-56 text-xs text-muted-foreground">
             Your project is drawn here as you answer — its name, its dataset, and the types you
             will be able to write.
@@ -78,15 +88,15 @@ export function StudioPreview({ organization, projectName, dataset, types }: Stu
               {dataset || 'no dataset yet'}
             </p>
             <ul className="mt-3 space-y-0.5">
-              {shown.map((type) => {
-                const Icon = iconFor(type.icon);
+              {shown.map((title) => {
+                const Icon = SUGGESTED_ICONS[title] ?? FileTextIcon;
                 return (
                   <li
-                    key={type.name}
+                    key={title}
                     className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground"
                   >
                     <Icon className="size-3.5 shrink-0" />
-                    <span className="truncate">{type.title}</span>
+                    <span className="truncate">{title}</span>
                   </li>
                 );
               })}
@@ -106,8 +116,8 @@ export function StudioPreview({ organization, projectName, dataset, types }: Stu
             ) : (
               <div className="flex h-full items-center justify-center">
                 <p className="max-w-56 text-center text-xs text-muted-foreground">
-                  Documents and assets live in a dataset. Its types are on the left — they are what
-                  the editor will offer you.
+                  Documents and assets live in a dataset, and what they hold is up to you: define the
+                  content types yourself, or paste a sample document and Achar writes them.
                 </p>
               </div>
             )}

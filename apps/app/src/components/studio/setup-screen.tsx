@@ -31,7 +31,9 @@ export function SetupScreen() {
     <div className="min-h-svh bg-background">
       <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-14">
         <div className="flex items-center gap-3">
-          <AcharMark className="size-8" />
+          {/* The label says "Achar Studio", so the mark is the flame alone: the
+              wordmark beside it would be the same name printed twice. */}
+          <AcharMark name={false} className="h-8" />
           <div>
             <p className="text-sm font-medium">Achar Studio</p>
             <p className="text-xs text-muted-foreground">The content studio</p>
