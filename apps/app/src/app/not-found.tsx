@@ -16,13 +16,22 @@ import { getSiteSettings } from '@/content';
  * why it reads as an answer rather than as a stack trace.
  *
  * **The frame is drawn here rather than inherited**, which is the one thing about
- * this file that is not obvious. A not-found boundary is resolved against the
- * root rather than against the route group it sits in: `(site)` adds no segment,
- * so Next reaches this component from above `(site)/layout.tsx` and renders it
- * without that layout's header, footer and theme provider. A 404 that had lost the
- * site's chrome was the first thing to break when the site and the studio became
- * one app, and a page that draws its own frame is the fix that does not depend on
- * how a framework resolves a boundary.
+ * this file that is not obvious, and it is here at the root rather than inside the
+ * site's route group for the same reason.
+ *
+ * A not-found boundary is resolved against the *root*, not against the group it
+ * sits in, so a `not-found.tsx` under `(site)` renders without that layout's
+ * header, footer and theme provider. Routing an unmatched path through a
+ * catch-all page that throws `notFound()` fixes the copy and breaks something
+ * worse: a page reached that way is rendered dynamically, so its markup arrives
+ * in the flight payload instead of the HTML, and under the studio's
+ * `force-dynamic` segment the status is a 200 rather than a 404. This file is
+ * what Next prerenders for every unmatched URL, which is why it draws its own
+ * frame and lives at the root.
+ *
+ * The consequence is that a mistyped studio path gets the *site's* 404. That is
+ * the honest trade: one app has one root boundary, and a wrong-surface 404 that
+ * is a real 404 beats a right-surface one that answers 200.
  */
 export default async function NotFound() {
   const settings = await getSiteSettings();
