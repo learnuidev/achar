@@ -15,7 +15,14 @@ import { bodyFor } from './portable-text';
  *
  * The footer's link columns and the settings document's two calls to action are
  * the specification: every href in `site-footer.tsx` and in `siteSettings`
- * resolves to one of these documents, so nothing on the site 404s.
+ * resolves to one of these documents **or to a route the app really has**, so
+ * nothing on the site 404s. The primary call to action is the second kind: it
+ * points at `/sign-up`, which is the sign-up route, and there is deliberately no
+ * `page` document at that path. There used to be one — a how-to guide called
+ * "Start building" — and it is why pressing the header's button did not offer to
+ * create an account: a document whose slug is `signup` is served by the catch-all
+ * at a URL a person reads as the sign-up form, and it wins over nothing, because
+ * no route claimed the path.
  *
  * **One builder per page, made once.** `bodyFor` numbers the keys it hands out,
  * and that numbering is only unique within one builder — so calling `bodyFor`
@@ -34,7 +41,6 @@ const careers = bodyFor('page-careers');
 const status = bodyFor('page-status');
 const processors = bodyFor('page-subprocessors');
 const docs = bodyFor('page-docs');
-const signup = bodyFor('page-signup');
 
 export const seedPages: AcharDocument[] = [
   seedDocument('page-about', 'page', {
@@ -278,32 +284,6 @@ export const seedPages: AcharDocument[] = [
       docs.p(
         'The typed client is a package, and the demo application in this repository is a working example of using it from outside: paste an API URL and a token, run a query, get documents back. That is the whole integration.',
       ),
-    ],
-  }),
-
-  seedDocument('page-signup', 'page', {
-    title: 'Start building',
-    slug: 'signup',
-    body: [
-      signup.p(
-        'A project is a dataset, a schema, and a studio. Making one takes a minute, and the first dataset is seeded with a working content model you can edit rather than an empty screen.',
-      ),
-      signup.h2('From the console'),
-      signup.p(
-        'The console in this repository deploys an environment and writes every app\'s configuration to point at it. That is the fastest path from a clone to a studio you can type into.',
-      ),
-      signup.code('npm install\nnpm run console   # → Backends → dev → Deploy'),
-      signup.h2('From the studio'),
-      signup.p(
-        'Once an environment is up, the studio is where projects and datasets are made. A new dataset starts with Achar\'s own content model — posts, authors, categories, customers, features, plans, questions and integrations — so the first thing you see is a schema you can change rather than a blank page.',
-      ),
-      signup.h2('Reading it back'),
-      ...signup.list([
-        'The public site in this repository reads a seed corpus with no backend configured at all, and switches to live content the moment `NEXT_PUBLIC_ACHAR_API_URL` is set.',
-        'The demo application is a working third-party client: an API URL, a token, and a query.',
-        'The typed client is `@achar/api`, and every method returns the shape declared in `@achar/types`.',
-      ]),
-      signup.p('No credit card, no sales call, and no plan that expires while you are deciding.'),
     ],
   }),
 ];

@@ -16,7 +16,7 @@ export const seedSiteSettings: AcharDocument[] = [
     description:
       'Achar is a content lake, a query language, and a studio: one place to model your content, one API to read it from anywhere, and a publishing flow your editors can follow without a deploy.',
     announcement: 'Achar 2.0 is out — GROQ projections, draft previews, and a schema-aware studio.',
-    primaryCta: { label: 'Start free', href: '/signup' },
+    primaryCta: { label: 'Start free', href: '/sign-up' },
     secondaryCta: { label: 'Read the docs', href: '/docs' },
   }),
 ];

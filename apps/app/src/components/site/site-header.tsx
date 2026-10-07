@@ -14,6 +14,12 @@ import type { Cta } from '@/content/types';
  * from the layout, which is why this takes a prop rather than hard-coding a
  * label — the button in the header and the button in the hero are the same
  * sentence, and it is edited in one place.
+ *
+ * "Sign in" beside it is the one link here that is not content, and it is not a
+ * call to action either: nobody is persuaded by it. It is there because the
+ * button is the way in for somebody who has no account, and a bar with only that
+ * button leaves the person who already has one — the person most likely to be
+ * looking at this site — with no visible door.
  */
 export function SiteHeader({ primaryCta }: { primaryCta?: Cta }) {
   const cta = primaryCta ?? { label: 'Start building', href: '/product' };
@@ -30,6 +36,12 @@ export function SiteHeader({ primaryCta }: { primaryCta?: Cta }) {
         <SiteNav />
 
         <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/sign-in"
+            className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
+          >
+            Sign in
+          </Link>
           <ThemeToggle />
           <Button asChild size="sm">
             <Link href={cta.href}>{cta.label}</Link>

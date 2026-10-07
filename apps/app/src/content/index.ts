@@ -265,6 +265,21 @@ export async function getPost(slug: string): Promise<Post | null> {
 }
 
 /**
+ * The slugs a `page` document may not claim.
+ *
+ * `/signup` and `/login` are the spellings people type for the two account
+ * pages, and the app's real URLs are `/sign-up` and `/sign-in`. Neither of these
+ * is a route, which is the whole problem: nothing outranks the catch-all at these
+ * paths, so a document that takes one of these slugs *is* the page at that URL.
+ * That is not a hypothetical — this dataset seeded a how-to guide called "Start
+ * building" at `/signup`, the settings document's "Start free" points at
+ * `/signup`, and the result was a sign-up button that led to an essay. Reserving
+ * the two slugs is what stops it happening again: a document claiming one of them
+ * is a stale copy of an account URL by definition, so it is not a page.
+ */
+const RESERVED_SLUGS = ['signup', 'login'];
+
+/**
  * A `page` document by slug.
  *
  * `$slug` is a parameter rather than an interpolated string: the slug comes
@@ -283,6 +298,8 @@ export async function getPost(slug: string): Promise<Post | null> {
  * the whole point of this layer is that nobody can tell the difference.
  */
 export async function getPage(slug: string): Promise<CmsPage | null> {
+  if (RESERVED_SLUGS.includes(slug)) return null;
+
   const documents = await documentsOfType(
     'page',
     '*[_type == "page" && (slug == $slug || slug.current == $slug)][0]',
@@ -291,8 +308,14 @@ export async function getPage(slug: string): Promise<CmsPage | null> {
   return narrow(documents, toPage).find((page) => page.slug === slug) ?? null;
 }
 
-/** Every page document, for the sitemap — a route somebody added in the studio. */
+/**
+ * Every page document, for the sitemap — a route somebody added in the studio.
+ *
+ * A reserved slug is left out here as well as in `getPage`, because a sitemap
+ * that advertises a URL which answers 404 is worse than one that omits a page
+ * nobody can reach: submit it and a crawler reports the site as broken.
+ */
 export async function getPages(): Promise<CmsPage[]> {
   const documents = await documentsOfType('page', '*[_type == "page"]');
-  return narrow(documents, toPage);
+  return narrow(documents, toPage).filter((page) => !RESERVED_SLUGS.includes(page.slug));
 }

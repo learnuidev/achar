@@ -174,14 +174,16 @@ export function SettingsForm({
           <Field
             label="Callback URLs"
             htmlFor="callback-urls"
-            hint="One per line. Cognito accepts https, and http on localhost. These are the origins allowed to receive the authorization code."
+            hint="One per line. Cognito accepts https, and http on localhost. These are the origins allowed to receive the authorization code — and Cognito compares them literally, so the path has to be the one the app actually serves: the studio's callback is /studio/auth/callback, not /auth/callback."
           >
             <TextArea
               id="callback-urls"
               rows={5}
               value={callbackUrls}
               onChange={(event) => setCallbackUrls(event.target.value)}
-              placeholder={"http://localhost:3000\nhttp://localhost:3000/auth/callback"}
+              placeholder={
+                "http://localhost:3000\nhttp://localhost:3000/studio/auth/callback\nhttp://localhost:3002/auth/callback"
+              }
               spellCheck={false}
             />
           </Field>

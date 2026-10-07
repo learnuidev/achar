@@ -1,7 +1,6 @@
-import { CfnOutput, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { CfnOutput, Duration, RemovalPolicy, SecretValue, Stack } from 'aws-cdk-lib';
 import type { StackProps } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import type { Construct } from 'constructs';
 
 import type { AcharConfig } from '../config.ts';
@@ -114,27 +113,35 @@ export class AcharAuthStack extends Stack {
 
     const hasGoogle = Boolean(config.auth.googleClientId);
 
-    if (hasGoogle) {
-      // The secret is read from Secrets Manager **by CloudFormation**, at deploy
-      // time, through a dynamic reference — and it has to be Secrets Manager
-      // rather than SSM: `AWS::Cognito::UserPoolIdentityProvider` rejects an SSM
-      // Secure reference in `ProviderDetails/client_secret` outright, naming the
-      // property in the error. Neither the value nor the name of the parameter
-      // travels through Lambda.
-      const googleSecret = secretsmanager.Secret.fromSecretNameV2(
-        this,
-        'GoogleClientSecret',
-        config.googleClientSecretName,
-      );
+    /** The provider the app client names, when there is one. See the dependency below. */
+    let google: cognito.UserPoolIdentityProviderGoogle | undefined;
 
-      new cognito.UserPoolIdentityProviderGoogle(this, 'Google', {
+    if (hasGoogle) {
+      google = new cognito.UserPoolIdentityProviderGoogle(this, 'Google', {
         userPool: pool,
         clientId: config.auth.googleClientId,
         // `clientSecretValue`, not the deprecated `clientSecret`: the latter takes
         // a plain string, which would put the secret's *value* through this app
-        // and into the template. This one stays a reference CloudFormation
-        // resolves at deploy time.
-        clientSecretValue: googleSecret.secretValue,
+        // and into the template. This one stays a dynamic reference —
+        // `{{resolve:secretsmanager:…}}` — which CloudFormation resolves at deploy
+        // time. It has to be Secrets Manager rather than SSM, too:
+        // `AWS::Cognito::UserPoolIdentityProvider` rejects an SSM Secure reference
+        // in `ProviderDetails/client_secret` outright, naming the property in the
+        // error.
+        //
+        // **By name, not through `Secret.fromSecretNameV2`.** That import looks
+        // like the natural way to say this and it renders a *partial* ARN —
+        // `…:secret:achar/dev/google-client-secret`, without the six random
+        // characters Secrets Manager appends to a secret's real ARN, which CDK
+        // cannot know at synth time. Secrets Manager does not resolve a partial
+        // ARN: `GetSecretValue` answers
+        //
+        //   Secrets Manager can't find the specified secret.
+        //
+        // in the same words the deploy does, against a secret that is there.
+        // `SecretValue.secretsManager()` is handed the name and passes it through
+        // untouched, which resolves whether or not the value has been rotated.
+        clientSecretValue: SecretValue.secretsManager(config.googleClientSecretName),
         scopes: ['openid', 'email', 'profile'],
         attributeMapping: {
           email: cognito.ProviderAttribute.GOOGLE_EMAIL,
@@ -175,6 +182,25 @@ export class AcharAuthStack extends Stack {
       preventUserExistenceErrors: true,
       enableTokenRevocation: true,
     });
+
+    if (google) {
+      // **The client has to wait for the provider, and nothing else says so.**
+      //
+      // `supportedIdentityProviders` is a list of provider *names* rather than a
+      // reference to the provider resource, so CloudFormation is told about no
+      // relationship between the two and is free to update the client first. It
+      // does, and Cognito refuses the update while the pool has no such provider:
+      //
+      //   The provider Google does not exist for User Pool us-east-1_xxxxxxxxx
+      //
+      // That is a stage which already had a pool being given a Google client id
+      // for the first time — the client is updated, the create of the provider is
+      // never reached, and the stack rolls back. A stack built from nothing
+      // usually gets away with it, because the provider tends to be created
+      // before the client is; this dependency is what makes the order a fact
+      // rather than a likelihood, and it costs one `DependsOn`.
+      client.node.addDependency(google);
+    }
 
     this.userPool = pool;
     this.userPoolClientId = client.userPoolClientId;
