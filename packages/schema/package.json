@@ -1,0 +1,14 @@
+{
+  "name": "@achar/schema",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The schema DSL, validation, and the content model the site is rendered from.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@achar/types": "*"
+  }
+}

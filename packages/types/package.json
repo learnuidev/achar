@@ -1,0 +1,11 @@
+{
+  "name": "@achar/types",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The shapes the content API, the studio, the public site and the console all agree on.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

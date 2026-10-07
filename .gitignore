@@ -1,0 +1,26 @@
+node_modules/
+.npm-cache/
+
+# Next
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# CDK
+infra/cdk.out/
+infra/cdk.out.*/
+infra/dist/
+
+# Built handlers, staged by infra/scripts/bundle.mjs
+services/api/dist/
+
+# Per-app pointing at one environment at a time — written by the console.
+apps/*/.env.local
+
+# Local AWS / editor noise
+.DS_Store
+*.log
+.env
+.env.*
+!.env.local.example

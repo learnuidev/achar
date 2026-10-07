@@ -1,0 +1,44 @@
+{
+  "name": "achar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Achar — the content operating system. One repository for the public site, the content studio, a third-party API client, the console that deploys them, and the AWS backend they share.",
+  "workspaces": [
+    "apps/*",
+    "infra",
+    "packages/*",
+    "services/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "console": "npm run dev --workspace achar-console",
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev --workspace achar-web",
+    "dev:studio": "npm run dev --workspace achar-studio",
+    "dev:demo": "npm run dev --workspace achar-demo",
+    "build": "npm run build --workspace achar-web && npm run build --workspace achar-studio && npm run build --workspace achar-console && npm run build --workspace achar-demo",
+    "build:web": "npm run build --workspace achar-web",
+    "build:studio": "npm run build --workspace achar-studio",
+    "build:console": "npm run build --workspace achar-console",
+    "build:demo": "npm run build --workspace achar-demo",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "synth": "npm run synth --workspace achar-infra",
+    "diff": "npm run diff --workspace achar-infra",
+    "deploy": "npm run deploy --workspace achar-infra",
+    "deploy:dev": "npm run deploy:dev --workspace achar-infra",
+    "deploy:api": "npm run deploy:api --workspace achar-infra",
+    "deploy:data": "npm run deploy:data --workspace achar-infra",
+    "deploy:media": "npm run deploy:media --workspace achar-infra",
+    "deploy:auth": "npm run deploy:auth --workspace achar-infra",
+    "deploy:webhooks": "npm run deploy:webhooks --workspace achar-infra",
+    "bootstrap": "npm run bootstrap --workspace achar-infra",
+    "bundle": "npm run bundle --workspace achar-infra",
+    "import-state": "npm run import-state --workspace achar-infra",
+    "seed": "node services/api/scripts/seed.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
