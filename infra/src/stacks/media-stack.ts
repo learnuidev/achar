@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Annotations, CfnOutput, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import type { StackProps } from 'aws-cdk-lib';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
@@ -93,6 +93,15 @@ export class AcharMediaStack extends Stack {
         // The whole point of the CDN is that a page in Sydney does not wait for a
         // bucket in Virginia.
         priceClass: cloudfront.PriceClass.PRICE_CLASS_ALL,
+        // This only takes effect once the distribution has a **custom
+        // certificate**, and on a new environment it has none — CloudFront's
+        // default certificate fixes its own security policy at TLSv1, which is why
+        // CDK annotates the property as having no effect here rather than staying
+        // quiet about it. It is set anyway, because attaching an ACM certificate
+        // and a domain name is a two-line change somebody makes later, and the
+        // floor they get on that day should be the one written down now. The
+        // annotation is acknowledged below rather than left to print on every
+        // synth, since it is a known and accepted state rather than a surprise.
         minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
         defaultBehavior: {
           origin: origins.S3BucketOrigin.withOriginAccessControl(bucket),
@@ -104,6 +113,15 @@ export class AcharMediaStack extends Stack {
           responseHeadersPolicy: this.securityHeaders(),
         },
       });
+
+      // Acknowledged rather than silenced globally: this is the one annotation
+      // this app expects, and suppressing annotations wholesale would hide the
+      // next one somebody should have read.
+      Annotations.of(distribution).acknowledgeWarning(
+        '@aws-cdk/aws-cloudfront:minimumProtocolVersionWithoutCertificate',
+        'TLS 1.2 is the floor as soon as this distribution gets a custom certificate; ' +
+          'until then CloudFront\'s default certificate pins its own policy.',
+      );
 
       this.assetsBucket = bucket;
       this.distribution = distribution;

@@ -5,10 +5,11 @@ import { cn } from "@/lib/cn";
 /**
  * The console's one button.
  *
- * Four variants and two sizes, which is all a control panel needs. `@achar/ui`
- * uses `class-variance-authority` for its buttons because they have to survive
- * being restyled by whoever composes them; here the variants are a lookup and
- * the whole component is shorter than the import list would be.
+ * Four variants and two sizes, which is all a control panel needs. The design
+ * system in `packages/ui` uses `class-variance-authority` for its buttons
+ * because they have to survive being restyled by whoever composes them; here the
+ * variants are a lookup and the whole component is shorter than the import list
+ * would be.
  */
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";

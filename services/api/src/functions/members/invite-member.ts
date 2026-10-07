@@ -11,8 +11,7 @@
  * of their id, and it would be theirs to accept from themselves.
  */
 
-import { PROJECT_ROLES } from '@achar/types';
-import type { Member, ProjectRole } from '@achar/types';
+import type { Member } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
 import {
@@ -23,7 +22,7 @@ import {
   requiredStringField,
   withHandler,
 } from '../../lib/http';
-import { inviteMember, normalizeEmail, toApiMember } from '../../lib/members';
+import { inviteMember, normalizeEmail, requireProjectRole, toApiMember } from '../../lib/members';
 
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
@@ -32,12 +31,7 @@ export const handler = withHandler(async (event) => {
   await requireProjectAccess(projectId, viewer, 'admin');
 
   const body = jsonBody(event);
-  const role = requiredStringField(body, 'role');
-  if (!isProjectRole(role)) {
-    throw new HttpError(400, 'BAD_REQUEST', `role must be one of ${PROJECT_ROLES.join(', ')}`, {
-      field: 'role',
-    });
-  }
+  const role = requireProjectRole(requiredStringField(body, 'role'));
 
   // Normalized before it is compared or written: an address is one address
   // whatever case it was typed in, and the row is keyed by it.
@@ -53,8 +47,3 @@ export const handler = withHandler(async (event) => {
   const member: Member = toApiMember(row, viewer.userId);
   return created(member);
 });
-
-/** Whether a body value names one of the roles this API has. */
-function isProjectRole(value: string): value is ProjectRole {
-  return PROJECT_ROLES.some((role) => role === value);
-}

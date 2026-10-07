@@ -26,9 +26,9 @@ import { StudioRail } from '@/components/studio/studio-rail';
  * page that could disagree with the rail, and the rail is what tells a person
  * which types exist.
  *
- * The client provider sits here rather than at the root because it belongs to
- * the signed-in studio: the sign-in screen and the setup screen both make no
- * requests, and neither has a token to make them with.
+ * The API client itself comes from the gate above, which is where the token is
+ * available: everything below this point is signed in by definition, and a shell
+ * that built its own client would be a second one for the same session.
  */
 export function StudioShell({
   projectId,

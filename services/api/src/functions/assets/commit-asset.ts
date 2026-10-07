@@ -17,7 +17,15 @@ import type { Asset } from '@achar/types';
 import { requireDatasetAccess } from '../../lib/access';
 import { commitAsset, toAsset } from '../../lib/assets';
 import { requireViewer } from '../../lib/auth';
-import { jsonBody, pathParam, requiredStringField, stringField, withHandler, type ApiEvent } from '../../lib/http';
+import {
+  jsonBody,
+  numberField,
+  pathParam,
+  requiredStringField,
+  stringField,
+  withHandler,
+  type ApiEvent,
+} from '../../lib/http';
 
 export const handler = withHandler(async (event: ApiEvent) => {
   const viewer = await requireViewer(event);
@@ -29,9 +37,9 @@ export const handler = withHandler(async (event: ApiEvent) => {
   const assetId = requiredStringField(body, 'assetId');
 
   const record = await commitAsset(projectId, dataset, assetId, {
-    size: optionalNumber(body, 'size'),
-    width: optionalNumber(body, 'width'),
-    height: optionalNumber(body, 'height'),
+    size: numberField(body, 'size'),
+    width: numberField(body, 'width'),
+    height: numberField(body, 'height'),
     blurHash: stringField(body, 'blurHash'),
     contentType: stringField(body, 'contentType'),
   });
@@ -40,16 +48,3 @@ export const handler = withHandler(async (event: ApiEvent) => {
   return asset;
 });
 
-/**
- * A number the body may carry, or nothing.
- *
- * Whatever measured the object is a client, and a client's arithmetic is not a
- * reason to write a `NaN` into a row. A value that is not a finite, non-negative
- * number is therefore left out of the commit entirely, which the library reads
- * as "not measured this time" and answers with what the row already held.
- */
-function optionalNumber(body: Record<string, unknown>, key: string): number | undefined {
-  const value = body[key];
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
-  return value;
-}

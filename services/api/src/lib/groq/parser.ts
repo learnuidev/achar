@@ -44,6 +44,8 @@ export type Expr =
   | { kind: 'index'; source: Expr; index: number }
   | { kind: 'slice'; source: Expr; start: number | null; end: number | null }
   | { kind: 'filter'; source: Expr; filter: Expr }
+  /** `expr[]` — the elements, so what follows is applied to each of them. */
+  | { kind: 'each'; source: Expr }
   | { kind: 'order'; source: Expr; orderings: Ordering[] }
   | { kind: 'deref'; source: Expr }
   | { kind: 'projection'; source: Expr; fields: ProjectionField[] }
@@ -60,8 +62,15 @@ const COMPARISONS: Record<string, BinaryOp> = {
   gte: '>=',
 };
 
-/** The functions this subset implements. Anything else is a 400, never a `null`. */
-export const FUNCTIONS = new Set(['defined', 'count']);
+/**
+ * The functions this subset implements. Anything else is a 400, never a `null`.
+ *
+ * `now()` is here because Achar's own content teaches it — the `/docs` page
+ * prints `*[_type == "post" && publishedAt < now()]` as the example of a date
+ * filter — and a language whose own documentation demonstrates a call it refuses
+ * is a language with a bug in one of the two.
+ */
+export const FUNCTIONS = new Set(['defined', 'count', 'now']);
 
 export function parse(input: string): Expr {
   return new Parser(tokenize(input), input).parseQuery();
@@ -183,7 +192,20 @@ class Parser {
   }
 
   private parsePostfix(): Expr {
-    let expr = this.parsePrimary();
+    return this.continuePostfix(this.parsePrimary());
+  }
+
+  /**
+   * The postfix chain, from an expression already in hand.
+   *
+   * Split out for the projection shorthand: `author->name` and `metrics[]{ … }`
+   * begin with a bare name in a projection, and a shorthand that could only ever
+   * be a name would make the two most useful forms of a projection the two you
+   * cannot write. The alias stays the leading name, which is what the reader of
+   * `{ metrics[]{ label } }` sees.
+   */
+  private continuePostfix(start: Expr): Expr {
+    let expr = start;
 
     for (;;) {
       const token = this.peek();
@@ -198,6 +220,14 @@ class Parser {
       if (token.type === 'arrow') {
         this.next();
         expr = { kind: 'deref', source: expr };
+        // `author->name` is one token short of a path: a dereference is written
+        // without the dot that field access uses, so the name that follows it
+        // belongs to the dereferenced document rather than to this one.
+        const field = this.peek();
+        if (field.type === 'ident') {
+          this.next();
+          expr = { kind: 'field', source: expr, name: field.value };
+        }
         continue;
       }
 
@@ -221,15 +251,28 @@ class Parser {
   }
 
   /**
-   * `[...]`, which is a filter, a slice or an index.
+   * `[...]`, which is an each-item marker, a filter, a slice or an index.
    *
-   * Tried as a slice first because the two are told apart by their contents and
-   * not by their position: `[0]` is an index and `[_type == "post"]` is a filter,
-   * and a query `*[0]` that silently filtered on the number zero would be a
-   * wrong answer rather than a syntax error.
+   * Tried in order of how little they need to decide themselves. Empty brackets
+   * are `[]` and nothing else can be. A slice or an index is a number or two
+   * numbers, so it is tried next: `[0]` is an index and `[_type == "post"]` is a
+   * filter, and a query `*[0]` that silently filtered on the number zero would be
+   * a wrong answer rather than a syntax error. Whatever is left is a filter.
    */
   private parseBracket(source: Expr): Expr {
-    const opening = this.next();
+    this.next();
+
+    // `expr[]` — each item. What follows applies to the elements rather than to
+    // the array: `categories[]->title` and `metrics[]{ label }` both read as one
+    // thing per element, and the evaluator's own mapping over lists does the
+    // work from there.
+    if (this.at('rbracket')) {
+      this.next();
+      return { kind: 'each', source };
+    }
+
+    // Where the contents begin, so a failed slice attempt can be rewound and the
+    // same tokens read as a filter.
     const save = this.pos;
 
     const start = this.at('number') ? Number(this.next().value) : null;
@@ -249,7 +292,6 @@ class Parser {
     this.pos = save;
     const filter = this.parseOr();
     this.expect('rbracket', '`]` to close a filter');
-    void opening;
     return { kind: 'filter', source, filter };
   }
 
@@ -276,13 +318,13 @@ class Parser {
         this.next();
         if (this.accept('colon')) {
           fields.push({ alias: token.value, value: this.parseOr() });
-        } else if (this.at('lbrace')) {
-          const inner = this.parseProjection({ kind: 'field', source: { kind: 'this' }, name: token.value });
-          fields.push({ alias: token.value, value: inner });
         } else {
+          // A shorthand is a path, not a name: `{ author->name }`,
+          // `{ categories[]->title }` and `{ metrics[]{ label } }` all start with
+          // the field the projection is named after.
           fields.push({
             alias: token.value,
-            value: { kind: 'field', source: { kind: 'this' }, name: token.value },
+            value: this.continuePostfix({ kind: 'field', source: { kind: 'this' }, name: token.value }),
           });
         }
       } else {

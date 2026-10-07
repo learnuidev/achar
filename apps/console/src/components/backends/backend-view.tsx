@@ -91,10 +91,11 @@ export function BackendView({ stage }: { stage: string }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         {/* The chrome: where you came from, and the one control the whole page
-            exists to offer. The button is `DeployAction`, the same component the
-            deploy page draws — one place that decides the primary variant, the
-            rocket and the label — and it is driven by this page's `useDeploy`,
-            so the run it starts is the run the Deployments tab then streams. */}
+            exists to offer. `DeployAction` is the primary weight of the button —
+            the list's rows offer `DeployButton`, small and secondary, for a run
+            nobody on that screen is watching — and it is driven by this page's
+            `useDeploy`, so the run it starts is the run the Deployments tab then
+            streams. */}
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href="/backends"

@@ -226,7 +226,14 @@ export function resolveRows(
     return { row: published, draft: false, published: true };
   }
 
-  if (draft) return { row: draft, draft: true, published: false };
+  if (draft) {
+    // The one cell of the table that is neither row: a caller asking for what is
+    // published, of a document that has never been published, is asking for
+    // something that does not exist. Handing back the draft here is how a draft
+    // ends up on a public site.
+    if (perspective === 'published') return undefined;
+    return { row: draft, draft: true, published: false };
+  }
   if (published) return { row: published, draft: false, published: true };
   return undefined;
 }
@@ -834,7 +841,7 @@ function writePath(row: Record<string, unknown>, path: string, value: unknown): 
   else cursor[last] = value;
 }
 
-const KEY_CONDITION = { ExpressionAttributeNames: { '#key': 'documentKey' } };
+const KEY_CONDITION = { names: { '#key': 'documentKey' } } as const;
 
 /**
  * Writes what the batch produced.
@@ -853,6 +860,12 @@ async function emit(working: Working, clientRequestToken: string): Promise<void>
   const actions = keys
     .map((key) => ({ key, row: working.rows.get(key), was: working.original.get(key) }))
     .filter((entry) => entry.row !== undefined || entry.was !== undefined);
+
+  // What was just written is what the next mutation in the batch will find, so
+  // the expected state moves with it. Without this a non-atomic `create` then
+  // `patch` would carry `attribute_not_exists` onto the second write and collide
+  // with the row the first one had just made.
+  for (const key of keys) working.original.set(key, working.rows.get(key));
 
   if (actions.length === 0) return;
 

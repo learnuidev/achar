@@ -21,11 +21,24 @@ export interface HttpRouteSpec {
   /**
    * Whether the Cognito JWT authorizer guards this route.
    *
-   * Absent is `true`, and the one route that sets it to `false` is
-   * `GET /v1/info`. That is a decision rather than an oversight: a deployment
-   * that cannot be asked whether it is up is a deployment whose first symptom is
-   * a sign-in failure, and the info route is what the console's deploy
-   * checklist calls last.
+   * Absent is `true`. Nine routes set it to `false`, and they are two different
+   * decisions that happen to share a flag:
+   *
+   * - **`GET /v1/info`** — so a deployment can be asked whether it is up. One that
+   *   cannot is a deployment whose first symptom is a sign-in failure, and this is
+   *   the route the console's deploy checklist calls last.
+   * - **The eight content routes** (`/v1/data/**` and `/v1/assets/**`) — because
+   *   API Gateway's JWT authorizer understands Cognito tokens and nothing else. A
+   *   machine presents an Achar API token, which the gateway refuses before any
+   *   handler runs, so a JWT-authorised content route would make the whole token
+   *   model unreachable. Those handlers authenticate themselves through
+   *   `resolveViewer`, accepting either credential.
+   *
+   * **The consequence is that the handler is the only thing between the dataset and
+   * an anonymous caller on those eight routes.** Management routes keep the
+   * authorizer, because they are only ever called by a person who is already
+   * signed in and verifying at the edge means the handler never sees an
+   * unauthenticated request at all.
    */
   authorized?: boolean;
 }

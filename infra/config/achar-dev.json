@@ -1,7 +1,12 @@
 {
   "stage": "dev",
-  "account": "000000000000",
+  "account": "765302404291",
   "region": "us-east-1",
+  "ownership": {
+    "tables": true,
+    "media": true,
+    "auth": true
+  },
   "mail": {
     "fromAddress": "no-reply@achar.example",
     "appBaseUrl": "http://localhost:3000",
@@ -24,9 +29,5 @@
       "http://localhost:3002"
     ]
   },
-  "ownership": {
-    "tables": true,
-    "media": true,
-    "auth": true
-  }
+  "googleClientSecretName": "achar/dev/google-client-secret"
 }

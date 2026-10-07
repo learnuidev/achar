@@ -165,6 +165,43 @@ Everything is under `/v1`. Every route needs a bearer token — either a Cognito
 token or one of the API tokens the studio issues — **except `GET /v1/info`**,
 which exists precisely so a deployment can be asked whether it is up.
 
+### Two credentials, and where each one is checked
+
+Achar accepts two kinds of caller, and the split between them decides where
+authentication happens:
+
+| Caller | Credential | Called by |
+| --- | --- | --- |
+| A signed-in person | Cognito **ID token** | The studio and the console |
+| A machine | An **API token**, `achar_<tokenId>_<secret>` | The site, the demo app, scripts, CI |
+
+The routes split to match, because **API Gateway's JWT authorizer only understands
+Cognito tokens** — an API token presented to a JWT-authorised route is refused at
+the gateway, before any handler runs, so a token path in the handler would be dead
+code.
+
+| Routes | Authorizer | Who verifies |
+| --- | --- | --- |
+| `/v1/projects/**`, `/v1/me` | Cognito JWT, at the gateway | API Gateway |
+| `/v1/data/**`, `/v1/assets/**` | none | **the handler**, via `resolveViewer` |
+| `/v1/info` | none | nobody — it is the one anonymous route |
+
+`resolveViewer` is the single entry point that decides which credential it was
+given. On a gateway-authorised route it reads the claims API Gateway already
+verified — re-verifying them would be work for nothing. On a content route there
+are no claims, so it verifies an API token by hash comparison, or a Cognito ID
+token by RS256 signature against the pool's JWKS (cached in module scope, since a
+fetch per request would put a network round trip on every content read).
+
+**The consequence to remember:** a content route has no gateway authorizer, so
+**its handler is the only thing between the dataset and an anonymous caller**.
+Every one of those routes refuses an anonymous request itself, with the same
+`ApiErrorBody` 401 envelope.
+
+Management routes stay on the gateway authorizer because they are only ever called
+by a person who is already signed in, and doing the verification at the edge means
+the handler never sees an unauthenticated request at all.
+
 `{p}` is a project id, `{d}` a dataset name.
 
 | Method | Path | Who | What it does |
@@ -276,9 +313,17 @@ in. Adding a route means adding a `FunctionSpec` and a file under
 
 ### HTTP API
 
-API Gateway **HTTP API** (v2), one Lambda integration per function, Cognito JWT
-authorizer on everything except `GET /v1/info`, and a `$default` route answering
-404 as JSON. CORS allows the three app origins.
+API Gateway **HTTP API** (v2), one Lambda integration per function, and a Cognito
+JWT authorizer on the management routes only — the content routes authenticate
+themselves, for the reason given under *Two credentials* above. CORS allows the
+app origins.
+
+**The handlers set `Access-Control-Allow-Origin` themselves**, in the one function
+every response passes through, because an HTTP API applies its CORS configuration
+to *preflight* requests only. A REST API adds the headers to the actual response
+too, through `GatewayResponses`, and that is the one thing the older product does
+better; the API Gateway preflight is still used, because a preflight that reached
+a Lambda would be an invocation for a request no user made.
 
 ## The console
 

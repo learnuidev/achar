@@ -225,7 +225,7 @@ export function SettingsForm({
               type="email"
               value={fromAddress}
               onChange={(event) => setFromAddress(event.target.value)}
-              placeholder="no-reply@achar.example"
+              placeholder="no-reply@example.com"
               spellCheck={false}
             />
           </Field>

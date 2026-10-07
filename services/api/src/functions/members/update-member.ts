@@ -10,12 +10,11 @@
  * route, so the demotion could not be undone through this API by anybody.
  */
 
-import { PROJECT_ROLES } from '@achar/types';
-import type { Member, ProjectRole } from '@achar/types';
+import type { Member } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
 import { HttpError, jsonBody, pathParam, requiredStringField, withHandler } from '../../lib/http';
-import { toApiMember, updateMemberRole } from '../../lib/members';
+import { requireProjectRole, toApiMember, updateMemberRole } from '../../lib/members';
 
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
@@ -28,20 +27,10 @@ export const handler = withHandler(async (event) => {
   }
 
   const body = jsonBody(event);
-  const role = requiredStringField(body, 'role');
-  if (!isProjectRole(role)) {
-    throw new HttpError(400, 'BAD_REQUEST', `role must be one of ${PROJECT_ROLES.join(', ')}`, {
-      field: 'role',
-    });
-  }
+  const role = requireProjectRole(requiredStringField(body, 'role'));
 
   const updated = await updateMemberRole(projectId, userId, role);
 
   const member: Member = toApiMember(updated, viewer.userId);
   return member;
 });
-
-/** Whether a body value names one of the roles this API has. */
-function isProjectRole(value: string): value is ProjectRole {
-  return PROJECT_ROLES.some((role) => role === value);
-}

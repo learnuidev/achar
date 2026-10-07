@@ -1,16 +1,16 @@
 /**
  * The shapes the console's server and its browser agree on.
  *
- * One file, imported from both sides, for the same reason `@achar/types` exists:
- * a field added to an API response is added in one place and both halves see
- * it. Everything here is JSON — it crosses a `fetch`, and anything that is not
- * (a `ChildProcess`, a timer) stays on the server.
+ * One file, imported from both sides, for the same reason the shared types
+ * package exists: a field added to an API response is added in one place and
+ * both halves see it. Everything here is JSON — it crosses a `fetch`, and
+ * anything that is not (a `ChildProcess`, a timer) stays on the server.
  *
- * The console has its own copy rather than importing `@achar/types`, and that is
- * the same decision as having no `@achar/ui`: this app describes a deployment,
- * and a description that shares a type with the thing it describes goes stale
- * exactly when it is needed. What is in here is what a *page* draws, which is
- * not the same list as what a handler returns.
+ * The console has its own copy rather than importing `packages/types`, and that
+ * is the same decision as drawing with no shared design system: this app
+ * describes a deployment, and a description that shares a type with the thing it
+ * describes goes stale exactly when it is needed. What is in here is what a
+ * *page* draws, which is not the same list as what a handler returns.
  */
 
 export type LogStream = "out" | "err" | "note";

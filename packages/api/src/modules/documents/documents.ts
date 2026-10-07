@@ -11,12 +11,28 @@ import type {
 
 import { queryString, segment, type ApiContext } from '../../lib/context';
 
-/** Which documents of one type a studio's list asks for. */
+/**
+ * Which documents of one type a studio's list asks for.
+ *
+ * `search` and `order` are here because the route accepts them and a client that
+ * silently drops a parameter is worse than one that never offered it: the caller
+ * sees a full list and concludes the search matched everything.
+ *
+ * Both are applied **within the page** rather than by the database, which is worth
+ * knowing when a result looks short. The index the list reads orders by
+ * `_updatedAt`, so a different order, or a text match, can only be taken over the
+ * rows the index already returned. Ordering a whole dataset by `publishedAt` would
+ * need an index on it, and this dataset does not have one.
+ */
 export interface ListDocumentsOptions {
   type: string;
   limit?: number;
   nextToken?: string;
   perspective?: Perspective;
+  /** A case-insensitive substring of the document's preview title. */
+  search?: string;
+  /** `field:asc` or `field:desc`. Any field except `_updatedAt` sorts in the page. */
+  order?: string;
 }
 
 export interface GetDocumentOptions {
@@ -57,6 +73,8 @@ export function listDocuments(
     limit: options.limit,
     nextToken: options.nextToken,
     perspective: options.perspective,
+    search: options.search,
+    order: options.order,
   });
   return api.get<ListResponse<DocumentSummary>>(
     `/v1/data/list/${projectId}/${dataset}${search}`,

@@ -632,9 +632,8 @@ interface StepCommand {
  * `run` rather than `spawn`, because a build's whole value is its output: every
  * line arrives in the step's transcript as it is printed, and the whole of it is
  * kept for the note a failure writes. The process is handed to the run through
- * `ctx.owns`, so Stop reaches it — a build nobody can cancel is a build that
- * holds the checkout for ten minutes while somebody waits to press the button
- * again.
+ * `ctx.owns`, so Stop reaches it — a build nobody can cancel is a build still
+ * compiling while the person who started it waits to start another.
  */
 async function exec(
   ctx: StepContext,
@@ -694,21 +693,19 @@ function assertOk(result: RunResult, what: string, timeoutMs: number): void {
  * it starts one.
  */
 function lastBuild(file: string, folder: string): CheckOutcome {
-  let id: string | null = null;
-  let at: number | null = null;
   try {
-    id = fs.readFileSync(file, "utf8").trim() || null;
-    at = fs.statSync(file).mtimeMs;
+    const id = fs.readFileSync(file, "utf8").trim();
+    const at = fs.statSync(file).mtimeMs;
+    if (id) {
+      return {
+        satisfied: false,
+        note: `the last build was ${id}, ${relative(at, Date.now())} — building again`,
+      };
+    }
   } catch {
     // Never built here, which is an answer rather than a failure.
   }
-
-  if (!id) return { satisfied: false, note: `nothing has been built in ${folder} yet` };
-  if (at === null) return { satisfied: false, note: `the last build was ${id} — building again` };
-  return {
-    satisfied: false,
-    note: `the last build was ${id}, ${relative(at, Date.now())} — building again`,
-  };
+  return { satisfied: false, note: `nothing has been built in ${folder} yet` };
 }
 
 interface BuildReport {
@@ -909,7 +906,10 @@ export function buildBuildPlan(app: AppKey, stage: string): PlanStep[] {
       const phases: Array<[RegExp, string]> = [
         [/Creating an optimized production build/i, "compiling"],
         [/Compiled successfully/i, "compiled"],
-        [/Generating static pages|Finalizing page optimization|Collecting build traces/i, "writing the output"],
+        [
+          /Generating static pages|Finalizing page optimization|Collecting build traces/i,
+          "writing the output",
+        ],
       ];
 
       const onLine = (stream: LogStream, text: string) => {
@@ -956,15 +956,13 @@ export function buildBuildPlan(app: AppKey, stage: string): PlanStep[] {
     check: async (ctx) => {
       const outputs = await outputsFor(ctx);
       const id = readBuildId(buildIdFile);
-      const report: BuildReport = {
+      const found: BuildReport = {
         id,
         apiUrl: outputs.apiUrl,
         inlined:
-          id !== null && outputs.apiUrl !== null
-            ? inBundles(clientDir, outputs.apiUrl)
-            : false,
+          id !== null && outputs.apiUrl !== null ? inBundles(clientDir, outputs.apiUrl) : false,
       };
-      return { satisfied: id !== null, note: buildReportNote(report, ctx.stage) };
+      return { satisfied: id !== null, note: buildReportNote(found, ctx.stage) };
     },
     apply: async (ctx) => {
       const id = readBuildId(buildIdFile);

@@ -4,10 +4,10 @@ import type { ShellState } from "@/components/console/state";
 import type { EnvironmentView, StackSummary } from "@/lib/types";
 import {
   awsCli,
-  awsJson,
   getIdentity,
   identityError,
   listBuckets,
+  listTables,
   snapshotAcharStacks,
   type AwsContext,
 } from "@/server/aws";
@@ -23,10 +23,10 @@ import { repoRoot } from "@/server/repo";
  * costs nothing and can never change anything. The one write in this app is the
  * deploy, and it is behind a button.
  *
- * It is one route rather than one per page because the AWS integration page's
- * subject is the same subject as the chrome's: the account this console acts on.
- * A route of its own would run the same `aws` processes a second time to answer
- * a page about the facts the chrome is already showing.
+ * One route rather than one per page, because the AWS integration page is about
+ * the same account the chrome already reads: a route of its own would run the
+ * same `aws` processes a second time to answer a page about facts that are
+ * already in hand.
  *
  * ## Why there is a cache
  *
@@ -40,11 +40,11 @@ import { repoRoot } from "@/server/repo";
  * ## Why nothing here can fail
  *
  * A control room that white-screens when the thing it controls is absent is
- * useless exactly when it is needed, and the state of a machine that has never
- * been set up is not an error — it is the first thing the page has to say. So
- * every read below is `optional`: a missing CLI, a profile with no credentials
- * and an account with no stacks all arrive as an empty answer and a sentence
- * beside it, never as a thrown request.
+ * useless exactly when it is needed, and a machine that has never been set up is
+ * not an error — it is the first thing the page has to say. So every read in
+ * this request swallows its own failure and answers with an empty value: a
+ * missing CLI, a profile with no credentials and an account holding no stacks
+ * arrive as empty lists and a sentence beside them, never as a thrown request.
  */
 
 export const runtime = "nodejs";
@@ -76,11 +76,18 @@ export async function GET(request: Request) {
   // Together, not one after the other: these are six `aws` processes with
   // nothing to say to each other, and run in sequence the page would spend four
   // of its five seconds waiting for a process to start.
+  //
+  // `listTables` asks the *account*, which is a different question from the one
+  // the tables tab asks: this is the AWS page, which has to draw what a checkout
+  // has left behind — including the tables of a stage whose config file is gone,
+  // which is precisely the state somebody opens that page to understand. The tab
+  // reads the Data stack's own outputs instead, because there the question is
+  // what one environment reads.
   const [cli, identity, stacks, tables, buckets] = await Promise.all([
     awsCli(),
     getIdentity(ctx),
     snapshotAcharStacks(ctx),
-    listAccountTables(ctx),
+    listTables("achar-", ctx),
     listBuckets("achar-", ctx),
   ]);
 
@@ -133,32 +140,4 @@ export async function GET(request: Request) {
 
   globalThis.__acharConsoleStateCache = { at: Date.now(), state };
   return NextResponse.json(state);
-}
-
-interface ListTablesResponse {
-  TableNames?: string[];
-}
-
-/**
- * Every table in the account that is named for an Achar stage.
- *
- * `list-tables` here rather than `backendTables(stage, ctx)` from
- * `server/tables.ts`, and the difference is the question being asked. The AWS
- * page asks what the *account* holds — what a checkout has left behind in it,
- * including the tables of a stage whose config file is gone, which is exactly
- * the state somebody opens that page to understand. `backendTables` answers the
- * other question, per environment, and the tables tab is where it belongs.
- *
- * The filter is the name prefix because the CLI has no prefix argument for this
- * call. `achar-<stage>-<kebab-of-id>` is how `infra/src/naming.ts` builds every
- * one of them, so the prefix is both what identifies a table as this
- * repository's and the only part of the name that survives its stage.
- */
-async function listAccountTables(ctx: Partial<AwsContext>): Promise<string[]> {
-  const response = await awsJson<ListTablesResponse>(["dynamodb", "list-tables"], {
-    ...ctx,
-    optional: true,
-  });
-
-  return (response?.TableNames ?? []).filter((name) => name.startsWith("achar-")).sort();
 }

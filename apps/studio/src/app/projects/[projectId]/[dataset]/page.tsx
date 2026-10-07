@@ -2,7 +2,7 @@
 
 import { use } from 'react';
 import Link from 'next/link';
-import { ArrowRightIcon, FileTextIcon, ImageIcon, LayersIcon, PencilIcon } from 'lucide-react';
+import { ArrowRightIcon, FileTextIcon, LayersIcon, PencilIcon } from 'lucide-react';
 import type { AcharDocument, SchemaType } from '@achar/types';
 import { Card, CardContent, Skeleton } from '@achar/ui';
 import { EmptyState, ErrorNote, ReadOnlyNote } from '@/components/ui/empty-state';

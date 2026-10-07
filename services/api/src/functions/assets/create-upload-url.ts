@@ -25,6 +25,7 @@ import {
   stringField,
   withHandler,
   type ApiEvent,
+  numberField,
 } from '../../lib/http';
 
 export const handler = withHandler(async (event: ApiEvent) => {
@@ -44,9 +45,9 @@ export const handler = withHandler(async (event: ApiEvent) => {
     kind,
     filename,
     contentType,
-    size: optionalNumber(body, 'size'),
-    width: optionalNumber(body, 'width'),
-    height: optionalNumber(body, 'height'),
+    size: numberField(body, 'size'),
+    width: numberField(body, 'width'),
+    height: numberField(body, 'height'),
     uploadedBy: viewer.userId,
   });
 
@@ -59,17 +60,3 @@ export const handler = withHandler(async (event: ApiEvent) => {
   } satisfies AssetUploadTicket);
 });
 
-/**
- * A number the body may carry, or nothing.
- *
- * `size`, `width` and `height` are hints — a studio measures them before it
- * uploads when it can — so anything that is not a finite, non-negative number is
- * ignored rather than refused. The row does not depend on them: the commit is
- * what measures, and an upload refused over a dimension a client formatted as a
- * string is an upload nobody can explain.
- */
-function optionalNumber(body: Record<string, unknown>, key: string): number | undefined {
-  const value = body[key];
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
-  return value;
-}

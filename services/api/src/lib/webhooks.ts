@@ -14,17 +14,16 @@
  * against the document carried in the message, because what a webhook is told
  * has to be what changed and not whatever the document has become since.
  *
- * **The enqueue is a signed HTTPS call rather than `@aws-sdk/client-sqs`.** This
- * service depends on four AWS clients and none of them is SQS; the SQS API is
- * one POST with a JSON body, the runtime already has the credentials in its
- * environment, and adding a client to every Lambda bundle for one call is a
- * dependency to keep current for no behaviour. If webhooks grow a second queue
- * operation, that trade is worth revisiting.
+ * The enqueue is one `SendMessage` through `@aws-sdk/client-sqs` — a declared
+ * dependency of this service rather than a request signed by hand against a
+ * package that merely happened to be in the tree. What matters either way is the
+ * shape: the send is awaited on the write path so the event is on the queue
+ * before the response, and a failure to queue is logged and swallowed, because a
+ * queue nobody can reach must not be a save nobody can make.
  */
 
 import { createHmac } from 'node:crypto';
-import { Sha256 } from '@aws-crypto/sha256-js';
-import { SignatureV4 } from '@smithy/signature-v4';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import type { Webhook, WebhookDelivery, WebhookEvent } from '@achar/types';
 import { WEBHOOK_EVENTS } from '@achar/types';
 import {
@@ -352,56 +351,24 @@ export function signPayload(body: string, signingSecret: string): string {
 }
 
 /**
- * One `SendMessage` to the queue, signed with the runtime's own credentials.
+ * One `SendMessage` to the queue.
  *
- * The AWS JSON protocol with `X-Amz-Target`, which is what the SQS SDK sends
- * too — the only difference being that this skips building a client, a command
- * and an endpoint resolver to make one POST.
+ * The client is built on first use and kept, like every other client in this
+ * library: a container that delivers a batch of events opens one connection
+ * pool rather than one per message.
  */
+let queue: SQSClient | undefined;
+
+function sqs(): SQSClient {
+  queue ??= new SQSClient({});
+  return queue;
+}
+
 async function sendToQueue(message: WebhookMessage): Promise<void> {
-  const queueUrl = new URL(env.webhookQueueUrl);
-  const body = JSON.stringify({
-    QueueUrl: env.webhookQueueUrl,
-    MessageBody: JSON.stringify(message),
-  });
-
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  if (!accessKeyId || !secretAccessKey) {
-    throw new Error('No AWS credentials in the environment to sign the SQS call with');
-  }
-
-  const signer = new SignatureV4({
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-      ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}),
-    },
-    region: env.region,
-    service: 'sqs',
-    sha256: Sha256,
-  });
-
-  const signed = await signer.sign({
-    method: 'POST',
-    protocol: queueUrl.protocol,
-    hostname: queueUrl.host,
-    path: queueUrl.pathname,
-    headers: {
-      host: queueUrl.host,
-      'content-type': 'application/x-amz-json-1.0',
-      'x-amz-target': 'AmazonSQS.SendMessage',
-    },
-    body,
-  });
-
-  const response = await fetch(queueUrl, {
-    method: 'POST',
-    headers: { ...signed.headers },
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`SQS SendMessage answered ${response.status}: ${await response.text()}`);
-  }
+  await sqs().send(
+    new SendMessageCommand({
+      QueueUrl: env.webhookQueueUrl,
+      MessageBody: JSON.stringify(message),
+    }),
+  );
 }

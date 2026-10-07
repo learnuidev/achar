@@ -69,6 +69,10 @@ export function DocumentEditor({
   const [focusPath, setFocusPath] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<'publish' | 'unpublish' | 'discard' | null>(null);
 
+  // The newest value, for the save that is still in flight to compare against.
+  const latestValue = useRef(value);
+  latestValue.current = value;
+
   const draftId = draftIdOf(documentId);
   const shown = pair.data?.shown ?? null;
   const published = pair.data?.published ?? null;
@@ -96,6 +100,12 @@ export function DocumentEditor({
     if (!canEdit) return false;
     setSaveState('saving');
 
+    // The value being written, held so that the reply can be compared against
+    // what is on screen now: a save that took a second and a half while somebody
+    // kept typing leaves unsaved work behind it, and a bar that said "Saved"
+    // there would be lying about the exact thing it exists to report.
+    const written = value;
+
     try {
       await client.mutate(projectId, dataset, {
         mutations: [
@@ -109,9 +119,10 @@ export function DocumentEditor({
         atomic: true,
       });
 
-      setDirty(false);
+      const stillDirty = latestValue.current !== written;
+      setDirty(stillDirty);
       setSaveError(null);
-      setSaveState('saved');
+      setSaveState(stillDirty ? 'dirty' : 'saved');
       setSavedAt(new Date().toISOString());
       pair.refresh();
       return true;
@@ -120,7 +131,7 @@ export function DocumentEditor({
       setSaveError(errorMessage(cause, 'Could not save the draft'));
       return false;
     }
-  }, [canEdit, client, projectId, dataset, draftId, type.name, value, pair]);
+  }, [canEdit, client, projectId, dataset, draftId, type.name, value, pair.refresh]);
 
   // Held in refs so the debounce and the keyboard shortcuts always call the
   // newest closure without re-registering listeners on every keystroke.
@@ -164,7 +175,7 @@ export function DocumentEditor({
     } finally {
       setBusy(false);
     }
-  }, [client, projectId, dataset, documentId, dirty, pair]);
+  }, [client, projectId, dataset, documentId, dirty, pair.refresh]);
 
   const requestPublish = useCallback(() => {
     // Publishing with issues is allowed and warned about: the schema's rules are
@@ -191,7 +202,7 @@ export function DocumentEditor({
     } finally {
       setBusy(false);
     }
-  }, [client, projectId, dataset, documentId, pair]);
+  }, [client, projectId, dataset, documentId, pair.refresh]);
 
   const runDiscard = useCallback(async () => {
     setBusy(true);
@@ -208,7 +219,7 @@ export function DocumentEditor({
     } finally {
       setBusy(false);
     }
-  }, [client, projectId, dataset, documentId, pair]);
+  }, [client, projectId, dataset, documentId, pair.refresh]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

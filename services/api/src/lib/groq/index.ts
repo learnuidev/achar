@@ -10,29 +10,47 @@
  *   match                    the glob `*` (any run) and `?` (one character)
  *   defined(expr)            true when a value is neither absent nor null
  *   count(expr)              the length of a list — `count(*[_type == "post"])`
+ *   now()                    the current instant, ISO 8601 — `publishedAt < now()`
  *   order(expr asc|desc, …)  after a pipe: `* | order(_updatedAt desc)`
  *   [n...m]  [n...]  [n]     a slice, an open slice, or one item; `n` may be negative
  *   { field, "alias": expr, nested { } }   a projection, nested as deep as you like
- *   ->                       dereference: `author->name`
+ *   expr->                   dereference a reference to the document it names
+ *   expr->field              …and take a field of it: `coverImage.asset->url`
+ *   expr[]->field            …for a list of references: `categories[]->title`
+ *   expr[]                   each item, so what follows applies element by element
+ *   expr[]{ … }              project every item: `metrics[]{ label, value }`
  *   ^                        the enclosing scope, from inside a nested projection
  *   $name                    a parameter, supplied in `params`
  *   |                        apply a function, a projection or a slice
  * ```
  *
- * Two things are here that a strict reading of the list above would not allow,
- * and both are deliberate. **List literals** — `["post", "page"]` — because `in`
- * without them can only be used against a parameter, which makes the one
- * operator that most wants a literal the one that cannot have one. And an
+ * A path, a projection entry and a list may all be written as one expression:
+ * `coverImage.asset->url` is a dot path, a dereference and a field, and
+ * `categories[]->title` is a list, an each-item marker, a dereference and a
+ * field. A dereference answers the document, `null` when nothing resolves, and a
+ * list of documents — with the unresolvable ones left out — when its left side
+ * is a list.
+ *
+ * A `*` written inside an expression is the same candidate set the query started
+ * from, which makes `*[_id in *[_type == "post"][0...3]._id]` a real subquery —
+ * over what the route fetched, not over the table. A document the fetched set
+ * does not hold is reached with `->`, which is what `lookup` is for.
+ *
+ * Three things are here that a strict reading of the list above would not
+ * allow, and all of them are deliberate. **List literals** — `["post", "page"]`
+ * — because `in` without them can only be used against a parameter, which makes
+ * the one operator that most wants a literal the one that cannot have one. An
  * **open slice** `[0...]`, the same production as `[n...m]` with the end left
- * off, which is what "the next twenty" is written as.
+ * off, which is what "the next twenty" is written as. And a **field read off a
+ * list mapping over it**, so `*[_type == "post"].title` is the array of titles
+ * it looks like rather than a `null` that reads as a missing field.
  *
  * Everything else is a `HttpError(400)` naming the character position — never an
- * empty result. `...` (a spread projection), array projections (`*[].items[]{ }`),
- * subqueries, joins (`*[]{ … }`), `references()`, `select()`, `score()`,
- * `boost()`, `path()`, arithmetic and string functions are all outside this
- * subset, and each of them says so rather than returning nothing, because a
- * query that silently matches no documents is indistinguishable from a dataset
- * with no content in it.
+ * empty result. `...` (a spread projection), subqueries, `references()`,
+ * `select()`, `score()`, `boost()`, `path()`, arithmetic and string functions are
+ * all outside this subset, and each of them says so rather than returning
+ * nothing, because a query that silently matches no documents is
+ * indistinguishable from a dataset with no content in it.
  *
  * Which documents a query runs over is the caller's business: the route fetches
  * candidates from an index and hands them in, so nothing here can become a scan.
@@ -109,6 +127,7 @@ function childrenOf(expr: Expr): Expr[] {
     case 'field':
     case 'index':
     case 'slice':
+    case 'each':
     case 'order':
     case 'deref':
     case 'projection':

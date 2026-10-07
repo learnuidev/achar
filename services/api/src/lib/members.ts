@@ -16,6 +16,7 @@
  */
 
 import type { Member, MemberStatus, ProjectRole } from '@achar/types';
+import { PROJECT_ROLES } from '@achar/types';
 import {
   Keys,
   countQuery,
@@ -47,6 +48,17 @@ export interface MemberRow extends Item {
   invitedBy?: string | null;
   invitedAt: string;
   joinedAt?: string | null;
+}
+
+/** A role out of a request body, refused by name when it is not one of the three. */
+export function requireProjectRole(value: string): ProjectRole {
+  const role = PROJECT_ROLES.find((candidate) => candidate === value);
+  if (!role) {
+    throw new HttpError(400, 'BAD_REQUEST', `role must be one of ${PROJECT_ROLES.join(', ')}`, {
+      field: 'role',
+    });
+  }
+  return role;
 }
 
 export function normalizeEmail(email: string): string {

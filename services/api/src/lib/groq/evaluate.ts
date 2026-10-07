@@ -64,6 +64,17 @@ export async function evaluate(expr: Expr, ctx: EvalContext, scope: Scope): Prom
 
     case 'field': {
       const source = await evaluate(expr.source, ctx, scope);
+      // A field read off a list maps over it, which is what makes
+      // `*[_type == "post"].title` the array of titles a person writing it
+      // expects. Reading one field off an array and answering `null` would be
+      // the silent empty result this language refuses to give anywhere else.
+      if (Array.isArray(source)) {
+        return source.map((item) =>
+          typeof item === 'object' && item !== null
+            ? (item as Record<string, unknown>)[expr.name]
+            : undefined,
+        );
+      }
       if (typeof source !== 'object' || source === null) return undefined;
       return (source as Record<string, unknown>)[expr.name];
     }
@@ -99,8 +110,33 @@ export async function evaluate(expr: Expr, ctx: EvalContext, scope: Scope): Prom
       return await sortBy([...source], expr.orderings, ctx, scope);
     }
 
+    case 'each': {
+      // `expr[]` is the elements of a list rather than the list. A scalar is
+      // wrapped instead of refused: `a[]` on a document that holds one reference
+      // rather than an array of them means the same thing to whoever wrote it.
+      const source = await evaluate(expr.source, ctx, scope);
+      if (Array.isArray(source)) return source;
+      if (source === undefined || source === null) return [];
+      return [source];
+    }
+
     case 'deref': {
       const source = await evaluate(expr.source, ctx, scope);
+      // A list of references answers a list of documents, with the elements that
+      // do not resolve left out: `categories[]->title` is a list of the titles
+      // that exist, and a `null` in the middle of it would be a list the caller
+      // has to filter before it can draw anything.
+      if (Array.isArray(source)) {
+        const documents: unknown[] = [];
+        for (const item of source) {
+          const id = referenceId(item);
+          if (!id) continue;
+          const resolved = await resolveReference(id, ctx);
+          if (resolved !== null && resolved !== undefined) documents.push(resolved);
+        }
+        return documents;
+      }
+
       const id = referenceId(source);
       if (!id) return null;
       return resolveReference(id, ctx);
@@ -319,6 +355,16 @@ async function call(
     if (!arg) throw new HttpError(400, 'QUERY_SYNTAX', '`defined()` needs one expression', { position: position + 1 });
     const value = await evaluate(arg, ctx, scope);
     return value !== undefined && value !== null;
+  }
+
+  if (name === 'now') {
+    if (args.length > 0) {
+      throw new HttpError(400, 'QUERY_SYNTAX', '`now()` takes no arguments', { position: position + 1 });
+    }
+    // ISO 8601 in UTC, which is the form a `datetime` field holds and the form
+    // that sorts as time — so `publishedAt < now()` compares two strings and
+    // means what it looks like.
+    return new Date().toISOString();
   }
 
   if (name === 'count') {

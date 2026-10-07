@@ -50,7 +50,15 @@ export function repoRoot(): string {
 }
 
 export function repoPath(...parts: string[]): string {
-  return path.join(repoRoot(), ...parts);
+  // `turbopackIgnore` is not an optimisation — it is the correct answer to a
+  // question the bundler cannot answer correctly here. It sees a path built from
+  // a runtime value and assumes the output might read *anything*, so it traces
+  // the whole repository into the server bundle and says so on every build. This
+  // app is never deployed: it runs from the checkout, and reading the checkout is
+  // its entire job. Tracing it into its own output is a copy of the thing it is
+  // reading, and the warning would be right about a hosted app and is wrong about
+  // this one.
+  return path.join(/* turbopackIgnore: true */ repoRoot(), ...parts);
 }
 
 /** The four apps the console starts, in the order they are shown. */

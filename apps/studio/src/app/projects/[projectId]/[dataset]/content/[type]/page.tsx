@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon, ArrowRightIcon, FilePlus2Icon, PlusIcon, SearchIcon } from 'lucide-react';
@@ -175,14 +175,39 @@ function ContentList({
 
   const documents = useDocuments(projectId, dataset, {
     type: type.name,
-    search: search || undefined,
-    order: orderBy ? `${orderBy.field}:${orderBy.direction}` : undefined,
     limit: PAGE_SIZE,
     nextToken: cursor.token,
     perspective: 'previewDrafts',
   });
 
-  const items = documents.data?.items ?? [];
+  /**
+   * Search and sorting, over the page that arrived.
+   *
+   * Both are page-scoped rather than dataset-scoped, and that is the API's own
+   * behaviour: `list` filters and orders within a page, because the index that
+   * would order a whole dataset by `publishedAt` does not exist. Doing the same
+   * work here means the list the studio draws is the list the API would have
+   * handed it — and the screen says so, rather than implying that a search
+   * covered everything. Past one page of matches, the honest tool is a query.
+   */
+  const items = useMemo(() => {
+    const page = documents.data?.items ?? [];
+    const term = search.toLowerCase();
+    const filtered = term
+      ? page.filter((document) => document.title.toLowerCase().includes(term))
+      : page;
+
+    if (!orderBy) return filtered;
+
+    const direction = orderBy.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((left, right) => {
+      const a = sortValue(left, orderBy.field);
+      const b = sortValue(right, orderBy.field);
+      if (a === b) return 0;
+      return (a < b ? -1 : 1) * direction;
+    });
+  }, [documents.data, search, orderBy]);
+
   const nextToken = documents.data?.nextToken ?? null;
 
   const mediaField = type.preview?.media;
@@ -190,6 +215,14 @@ function ContentList({
   return (
     <div className="space-y-4">
       {documents.error && <ErrorNote>{documents.error}</ErrorNote>}
+
+      {search && (
+        <p className="text-xs text-muted-foreground">
+          Searching this page of {items.length}. The list endpoint filters and orders within a
+          page — the index that would do either across a whole dataset does not exist — so a query
+          is the honest tool once a page is not enough.
+        </p>
+      )}
 
       {documents.loading && !documents.data ? (
         <div className="space-y-2">
@@ -264,6 +297,21 @@ function ContentList({
       )}
     </div>
   );
+}
+
+/**
+ * The value an ordering sorts by, out of a summary row.
+ *
+ * A summary carries the schema's preview fields rather than the whole document,
+ * so an ordering on anything else — `publishedAt`, an `order` number — falls back
+ * to when the row was last written. Sorting a page by a field the list does not
+ * carry would otherwise be an ordering that silently did nothing.
+ */
+function sortValue(document: DocumentSummary, field: string): string | number {
+  const holder = document as unknown as Record<string, unknown>;
+  const value = holder[field];
+  if (typeof value === 'number' || typeof value === 'string') return value;
+  return document._updatedAt;
 }
 
 /**

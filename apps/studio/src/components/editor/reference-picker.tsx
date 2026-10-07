@@ -136,12 +136,20 @@ function ReferenceDialog({
 
   const documents = useDocuments(projectId, dataset, {
     type,
-    search: term.trim() || undefined,
-    limit: 20,
+    limit: 25,
     perspective: 'previewDrafts',
   });
 
-  const items = documents.data?.items ?? [];
+  // Filtered here rather than at the API, which filters within a page for the
+  // same reason: there is no index that would search a whole dataset by title.
+  // A picker chooses between the documents somebody is already thinking of, and
+  // twenty-five of them is the list the target's own screen opens on.
+  const needle = term.trim().toLowerCase();
+  const items = needle
+    ? (documents.data?.items ?? []).filter((document) =>
+        document.title.toLowerCase().includes(needle),
+      )
+    : (documents.data?.items ?? []);
 
   return (
     <Dialog open onOpenChange={onOpenChange}>

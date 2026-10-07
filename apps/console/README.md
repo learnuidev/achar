@@ -25,7 +25,7 @@ one sentence, so everything is downstream of it:
 
 ```
 Frontends        /frontends        all four, what is up, and Start
-                 /frontends/<app>  one of them — Env variables · Build · Logs
+                 /frontends/<app>  one of them — Env variables · Build · Output
                                    ×  an environment
 
 Backends         /backends         every environment, what is deployed, and

@@ -361,9 +361,16 @@ export const TABLES: TableSpec[] = [
  *
  * One route each, and the pairing is the point: a handler that serves two routes
  * would have to branch on the path, which is a handler whose authorization
- * depends on which branch it took. `GET /v1/info` is the only route in the
- * service that carries no authorizer, and the reason is written where it is
- * declared.
+ * depends on which branch it took.
+ *
+ * **Nine routes carry no gateway authorizer**, and they are two decisions sharing
+ * one flag. `GET /v1/info` is public so a deployment can be asked whether it is
+ * up. The eight under `/v1/data/**` and `/v1/assets/**` are open *to the gateway*
+ * because API Gateway's JWT authorizer understands Cognito tokens and nothing
+ * else — a machine presenting an Achar API token would be refused before the
+ * handler ran, which would make the whole token model unreachable. Those eight
+ * authenticate themselves. `HttpRouteSpec.authorized` in `../types.ts` carries the
+ * full reasoning, and `docs/architecture.md` the table of who calls what.
  */
 export const FUNCTIONS: FunctionSpec[] = [
   {
@@ -670,7 +677,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 1024,
     description: 'Run a GROQ query against one dataset.',
-    http: [{ path: '/v1/data/query/{projectId}/{dataset}', method: 'GET' }],
+    http: [{ path: '/v1/data/query/{projectId}/{dataset}', method: 'GET', authorized: false }],
   },
   {
     key: 'list-documents',
@@ -679,7 +686,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'Documents of one type, paged, for a studio’s list.',
-    http: [{ path: '/v1/data/list/{projectId}/{dataset}', method: 'GET' }],
+    http: [{ path: '/v1/data/list/{projectId}/{dataset}', method: 'GET', authorized: false }],
   },
   {
     key: 'get-document',
@@ -688,7 +695,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'One document, at one perspective.',
-    http: [{ path: '/v1/data/doc/{projectId}/{dataset}/{documentId}', method: 'GET' }],
+    http: [{ path: '/v1/data/doc/{projectId}/{dataset}/{documentId}', method: 'GET', authorized: false }],
   },
   {
     key: 'mutate-documents',
@@ -697,7 +704,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 1024,
     description: 'Apply an ordered batch of mutations, and enqueue what changed.',
-    http: [{ path: '/v1/data/mutate/{projectId}/{dataset}', method: 'POST' }],
+    http: [{ path: '/v1/data/mutate/{projectId}/{dataset}', method: 'POST', authorized: false }],
   },
 
   // ── assets ─────────────────────────────────────────────────────────────────
@@ -708,7 +715,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'A dataset’s asset library.',
-    http: [{ path: '/v1/assets/{projectId}/{dataset}', method: 'GET' }],
+    http: [{ path: '/v1/assets/{projectId}/{dataset}', method: 'GET', authorized: false }],
   },
   {
     key: 'create-asset-upload-url',
@@ -717,7 +724,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'Reserve an asset row and presign a PUT for the bytes.',
-    http: [{ path: '/v1/assets/{projectId}/{dataset}/upload-url', method: 'POST' }],
+    http: [{ path: '/v1/assets/{projectId}/{dataset}/upload-url', method: 'POST', authorized: false }],
   },
   {
     key: 'commit-asset',
@@ -726,7 +733,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'Record an asset’s metadata once its bytes have landed.',
-    http: [{ path: '/v1/assets/{projectId}/{dataset}', method: 'POST' }],
+    http: [{ path: '/v1/assets/{projectId}/{dataset}', method: 'POST', authorized: false }],
   },
   {
     key: 'delete-asset',
@@ -735,7 +742,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     timeout: 29,
     memorySize: 512,
     description: 'Delete an asset’s object and its row.',
-    http: [{ path: '/v1/assets/{projectId}/{dataset}/{assetId}', method: 'DELETE' }],
+    http: [{ path: '/v1/assets/{projectId}/{dataset}/{assetId}', method: 'DELETE', authorized: false }],
   },
 ];
 

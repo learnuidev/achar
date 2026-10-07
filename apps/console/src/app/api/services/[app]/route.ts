@@ -48,9 +48,23 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
-/** The two things a request may ask about one app, checked rather than trusted. */
-function intentOf(body: Record<string, unknown>): { action: "start" | "build"; stage: string | null } {
-  const action = body.action === "build" ? "build" : "start";
+/**
+ * The two things a request may ask about one app, checked rather than trusted.
+ *
+ * An action that is neither of the two is **refused rather than read as a
+ * start**: `{ action: "buidl" }` starting a dev server, quietly, is the one
+ * outcome nobody typing that would expect.
+ */
+function intentOf(body: Record<string, unknown>): {
+  action: "start" | "build" | null;
+  stage: string | null;
+} {
+  const action =
+    body.action === undefined || body.action === "start"
+      ? "start"
+      : body.action === "build"
+        ? "build"
+        : null;
   const stage = typeof body.stage === "string" && body.stage.trim() ? body.stage.trim() : null;
   return { action, stage };
 }
@@ -93,6 +107,16 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { action, stage } = intentOf(await bodyOf(request));
+
+  if (action === null) {
+    return NextResponse.json(
+      {
+        error:
+          'That is not an action this route has. Use { action: "start" } — which is what an absent action means — or { action: "build" }.',
+      },
+      { status: 400 },
+    );
+  }
 
   if (stage !== null) {
     const refusal = stageRefusal(stage);

@@ -11,12 +11,11 @@
  * holds is not what this route is for.
  */
 
-import type { Member, ProjectRole } from '@achar/types';
-import { PROJECT_ROLES } from '@achar/types';
+import type { Member } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
-import { HttpError, jsonBody, pathParam, stringField, withHandler } from '../../lib/http';
-import { resendInvitation, toApiMember } from '../../lib/members';
+import { jsonBody, pathParam, stringField, withHandler } from '../../lib/http';
+import { requireProjectRole, resendInvitation, toApiMember } from '../../lib/members';
 
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
@@ -25,18 +24,15 @@ export const handler = withHandler(async (event) => {
 
   await requireProjectAccess(projectId, viewer, 'admin');
 
-  const role = stringField(jsonBody(event), 'role');
-  if (role !== undefined && !(PROJECT_ROLES as readonly string[]).includes(role)) {
-    throw new HttpError(400, 'BAD_REQUEST', `role must be one of ${PROJECT_ROLES.join(', ')}`, {
-      field: 'role',
-    });
-  }
+  const asked = stringField(jsonBody(event), 'role');
 
+  // Passing the role through rather than to a second route: re-inviting is also
+  // how an admin offers somebody a different place.
   const row = await resendInvitation(
     projectId,
     userId,
     viewer.userId,
-    role as ProjectRole | undefined,
+    asked === undefined ? undefined : requireProjectRole(asked),
   );
 
   const member: Member = toApiMember(row, viewer.userId);

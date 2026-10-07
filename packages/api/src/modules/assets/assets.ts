@@ -6,6 +6,8 @@ import { queryString, segment, type ApiContext } from '../../lib/context';
 export interface CreateUploadTicketBody {
   filename: string;
   contentType: string;
+  /** Which half of the library it belongs in — the route refuses a ticket without one. */
+  kind: AssetKind;
   size: number;
 }
 

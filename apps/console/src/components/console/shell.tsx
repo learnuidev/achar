@@ -36,11 +36,11 @@ import { cn } from "@/lib/cn";
  * into. So the rail is those three, in that order, rather than a list of pages:
  * *what you are deploying*, *what reads it*, and *where it lives*.
  *
- * **There is no fourth part**, and that is the difference from the console this
- * one is modelled on. Achar's frontends have no cloud deploy target at all: the
- * console starts their `next dev` locally and writes their `.env.local`, so
- * there is nothing for a second integration to be about — an entry pointing at
- * one would be a rail with a page behind it that cannot exist.
+ * **There is no fourth part**, and that is not an omission. Achar's frontends
+ * have no cloud deploy target at all — the console starts their `next dev`
+ * locally and writes their `.env.local` — so an entry for one would be a rail
+ * with a page behind it that cannot exist. The account is the only other place
+ * these apps are.
  *
  * The environment is deliberately **not** in the rail. It is the environment in
  * `/backends/<stage>`'s URL, or the dropdown on a frontend's page — the control
@@ -61,9 +61,9 @@ const NAV = [
     label: "Frontends",
     icon: ServerIcon,
     /**
-     * The count comes out of `FRONTENDS` rather than out of this sentence. A
-     * number written into prose has nothing keeping it true: this line said "the
-     * three apps" for as long as it took somebody to add a fourth.
+     * The count comes out of `FRONTENDS` rather than out of this sentence. The
+     * apps are a list in `lib/frontends.ts`, and a number written into prose is
+     * a second copy of that list with nothing keeping the two in step.
      */
     hint: `the ${FRONTENDS.length} apps, started against an environment`,
   },
@@ -174,9 +174,9 @@ function Rail() {
  * It is the product's wordmark seen from the operator's side: the same three
  * unequal lines of a document outline — unequal, because equal bars are a
  * hamburger menu — on the console's own monochrome tile instead of the
- * product's primary colour. The console imports no `@achar/*` package on
- * purpose (see `next.config.mjs`), and a wordmark is not worth being the one
- * exception to that.
+ * product's primary colour. The console imports nothing from the shared
+ * packages on purpose (see `next.config.mjs`), and a wordmark is not worth being
+ * the one exception to that.
  */
 function Brand() {
   return (

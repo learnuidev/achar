@@ -130,14 +130,17 @@ async function main() {
       );
     }
 
+    const outfile = outfileFor(spec.entry);
+
     await esbuild.build({
       entryPoints: [entryPoint],
-      outfile: outfileFor(spec.entry),
+      outfile,
       bundle: true,
       platform: 'node',
       target: `node${SERVICE_DEFAULTS.runtime.replace('nodejs', '').split('.')[0]}`,
-      // CommonJS because that is what Lambda's Node runtime loads for a
-      // `index.handler` entry point without an ESM marker in the bundle.
+      // CommonJS because that is what Lambda's Node runtime loads for an
+      // `index.handler` entry point, and because the handlers are bundled from
+      // ESM sources — esbuild is what bridges the two.
       format: 'cjs',
       external: ['@aws-sdk/client-*'],
       sourcemap: true,
@@ -146,6 +149,23 @@ async function main() {
       logLevel: 'warning',
       metafile: true,
     });
+
+    // The bundle's module type, stated rather than left to be inferred.
+    //
+    // Lambda decides how to load `index.js` from the nearest `package.json`,
+    // falling back to CommonJS when there is none — and in a deployed function
+    // there is none, because `Code.fromAsset` uploads this one directory. So the
+    // deployed function works either way. Writing it down matters for the *other*
+    // reader: this file lives under `infra/`, whose own `package.json` says
+    // `type: module` because the CDK app is ESM, so anything that loads a bundle
+    // from inside the repository — a smoke test, a debugger, a script — would
+    // otherwise parse CommonJS as ESM, see an empty namespace, and report that
+    // the handler exports nothing. Twenty bytes that make the artifact
+    // self-describing.
+    fs.writeFileSync(
+      path.join(path.dirname(outfile), 'package.json'),
+      `${JSON.stringify({ type: 'commonjs' }, null, 2)}\n`,
+    );
 
     rebuilt += 1;
     process.stdout.write(`\rBundled ${rebuilt}/${FUNCTIONS.length} handlers…`);

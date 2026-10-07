@@ -22,6 +22,11 @@ export async function uploadAsset(
   const ticket = await client.createUploadTicket(projectId, dataset, {
     filename: nameOf(file),
     contentType,
+    // The route refuses a ticket that does not name a kind, and the content type
+    // is where the answer is: the browser already knows whether the bytes it is
+    // about to send are an image, and an octet stream is the case where it does
+    // not, which is a file.
+    kind: contentType.startsWith('image/') ? 'image' : 'file',
     size: file.size,
   });
 

@@ -157,6 +157,63 @@ export function configPath(stage: string): string {
   return path.join(CONFIG_DIR, `achar-${stage}.json`);
 }
 
+/** The ports the four apps run on, which is what a default has to agree with. */
+const APP_PORTS = { app: 3000, studio: 3001, console: 3002 } as const;
+
+/**
+ * Where mail comes from and where the apps live, when the config says nothing.
+ *
+ * **`mail` is not decorative** — it is the only place the app origins are written
+ * down, and three things read them, each failing differently when it is missing:
+ * the API's CORS allow-list, the asset bucket's CORS rule, and the
+ * `NEXT_PUBLIC_*` URLs a deploy writes into each app. A config without it is not a
+ * config missing a nicety; it is a deploy that produces an API no browser can
+ * call, and a stack that throws a `TypeError` while reading `undefined.appBaseUrl`.
+ *
+ * A default is still better than a refusal, because this file is written by the
+ * console *and* edited by hand, and the console's path for a brand-new environment
+ * writes only what it has discovered. Defaulting to `localhost` means that file
+ * synthesizes and the values a deployed stage actually needs are visible in the
+ * file rather than implied by a crash. A stage meant to be reachable sets these.
+ */
+export function defaultMail(stage: string): MailSettings {
+  return {
+    fromAddress: 'no-reply@achar.example',
+    appBaseUrl: `http://localhost:${APP_PORTS.app}`,
+    studioBaseUrl: `http://localhost:${APP_PORTS.studio}`,
+    consoleBaseUrl: `http://localhost:${APP_PORTS.console}`,
+  };
+}
+
+/**
+ * What Cognito has to be told, when the config says nothing.
+ *
+ * An empty `googleClientId` is the meaningful part: **no Google provider is
+ * created at all**, which is a perfectly good pool — people sign up with an email
+ * address and a password and everything works. It is also the only possible
+ * ordering for a new environment, since registering an OAuth client requires
+ * knowing the pool's callback URL and the pool does not exist yet.
+ *
+ * The callback URLs default to the three apps on their own ports, `/auth/callback`
+ * included. Cognito refuses a client with **no** callback URL, so an empty list is
+ * a deploy failure whose message names a property rather than a cause — which is
+ * why `validate` insists on a non-empty list even though every other field here
+ * has a usable default.
+ */
+export function defaultAuth(stage: string): AuthSettings {
+  const origins = [
+    `http://localhost:${APP_PORTS.app}`,
+    `http://localhost:${APP_PORTS.studio}`,
+    `http://localhost:${APP_PORTS.console}`,
+  ];
+
+  return {
+    googleClientId: '',
+    callbackUrls: origins.flatMap((origin) => [origin, `${origin}/auth/callback`]),
+    logoutUrls: origins,
+  };
+}
+
 /**
  * The names of the imported resources, for a stack that has decided to import.
  *
@@ -201,9 +258,16 @@ export function loadConfig(stage: string): AcharConfig {
   // Defaults are applied before validation, never after: a config is checked in
   // the shape the stacks will actually read it in, so "ownership is missing"
   // cannot pass here and become a stack-sized surprise later.
+  //
+  // `mail` and `auth` are merged field by field rather than replaced wholesale,
+  // because a config that names its origins but not its sending address — or the
+  // other way round — is a half-filled form rather than a decision to have no
+  // origins at all.
   const config: AcharConfig = {
     ...parsed,
     ownership: ownershipOf(parsed),
+    mail: { ...defaultMail(parsed.stage), ...parsed.mail },
+    auth: { ...defaultAuth(parsed.stage), ...parsed.auth },
     googleClientSecretName: parsed.googleClientSecretName ?? googleClientSecretName(parsed.stage),
   };
 
@@ -232,6 +296,21 @@ function validate(config: AcharConfig): string[] {
 
   for (const field of ['stage', 'account', 'region'] as const) {
     if (!config[field]) problems.push(`${field} is empty`);
+  }
+
+  // The app origins are read by three stacks and by the deploy that writes each
+  // app's `.env.local`. An empty one is a CORS rule that allows nothing and an
+  // environment variable set to the empty string, neither of which looks like an
+  // error until somebody loads a page.
+  for (const field of ['appBaseUrl', 'studioBaseUrl', 'consoleBaseUrl'] as const) {
+    if (!config.mail?.[field]) problems.push(`mail.${field} is empty`);
+  }
+
+  // Cognito rejects a client with no callback URL, and it names the property
+  // rather than the cause. An empty list is also what a hand-edit leaves behind
+  // when somebody deletes the URLs to "start over".
+  if (!config.auth?.callbackUrls?.length) {
+    problems.push('auth.callbackUrls is empty, and a Cognito app client must have at least one');
   }
 
   const ownership = ownershipOf(config);

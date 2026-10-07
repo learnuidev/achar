@@ -5,22 +5,17 @@ import { asPage } from '@/lib/api-shapes';
 import { errorStatus } from '@/lib/errors';
 import { useResource, type Resource } from '@/hooks/use-resource';
 
-/** How a list of documents is asked for: which type, in what order, which page. */
+/** How a list of documents is asked for: which type, and which page. */
 export interface DocumentsQuery {
   type: string;
-  search?: string;
-  /** `publishedAt:desc` — one of the fields, and the direction. */
-  order?: string;
   limit?: number;
   nextToken?: string | null;
   /** Defaults to `previewDrafts`, because a studio shows what an editor is working on. */
   perspective?: Perspective;
 }
 
-export interface DocumentsPage {
-  items: DocumentSummary[];
-  nextToken: string | null;
-}
+/** A page of summaries, exactly as the list endpoint pages them. */
+export type DocumentsPage = ListResponse<DocumentSummary>;
 
 /**
  * A page of documents of one type.
@@ -30,6 +25,14 @@ export interface DocumentsPage {
  * tells the list whether a draft exists beside the published row, and pages by
  * a token rather than an offset. A GROQ query would have to re-derive all of
  * that, in the studio, per keystroke.
+ *
+ * Its request carries a type, a limit, a page token and a perspective, and
+ * nothing else: searching and sorting a list happen over the page in
+ * `content/[type]`, which is where the API's own `search` and `order` parameters
+ * operate too — both are page-scoped there, because the index that would sort a
+ * whole dataset by `publishedAt` does not exist. The honest alternative past one
+ * page is a `query`, which is what the list screen says when somebody asks for
+ * more than a page of matches.
  */
 export function useDocuments(
   projectId: string,
@@ -41,8 +44,6 @@ export function useDocuments(
     projectId,
     dataset,
     query.type,
-    query.search ?? '',
-    query.order ?? '',
     String(query.limit ?? ''),
     query.nextToken ?? '',
     query.perspective ?? '',
@@ -51,8 +52,6 @@ export function useDocuments(
   return useResource(key, async (client) => {
     const answer = await client.listDocuments(projectId, dataset, {
       type: query.type,
-      ...(query.search ? { search: query.search } : {}),
-      ...(query.order ? { order: query.order } : {}),
       ...(query.limit ? { limit: query.limit } : {}),
       ...(query.nextToken ? { nextToken: query.nextToken } : {}),
       ...(query.perspective ? { perspective: query.perspective } : {}),

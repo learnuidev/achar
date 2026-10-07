@@ -1557,11 +1557,11 @@ function describeConflicts(conflicts: SharedUse[]): string {
 /**
  * The tables this stage created, deleted and waited for.
  *
- * The names come from `stageTableNames`, which reads the Data stack's outputs —
- * the physical name of a created table is written down nowhere else, and a table
- * whose name is guessed is a table that is not deleted. The CLI's own waiter is
- * what makes this step end when the table is gone rather than when the request
- * was accepted.
+ * The names come from `tablesOf`, which asks the account by name prefix rather
+ * than reading the Data stack — the stack is gone by the time this runs, and a
+ * table whose name is guessed is a table that is not deleted. The CLI's own
+ * waiter is what makes this step end when the table is gone rather than when the
+ * request was accepted.
  */
 function tablesStep(): PlanStep {
   return {
@@ -1967,7 +1967,10 @@ async function logGroupsOf(ctx: StepContext): Promise<string[]> {
  */
 function credentialsDataStep(): PlanStep {
   return {
-    id: "credentials",
+    // `secrets`, not `credentials`: the step above with that id is the identity
+    // check, and two steps sharing an id is two rows the page cannot tell apart —
+    // it keys them by id, so opening one would open both.
+    id: "secrets",
     title: "This environment's credentials are gone",
     detail:
       "The Google client secret in Secrets Manager, at `achar/<stage>/google-client-secret`. It is per stage and named after it, which is what makes it safe to delete: no other environment reads it. What is deliberately *not* touched is a Google OAuth client in the Cloud console — nothing here can enumerate what else uses it.",

@@ -15,7 +15,7 @@ import {
   runProgress,
   runningFor,
 } from "@/lib/backends";
-import { apiHost, relative } from "@/lib/format";
+import { apiHost, plural, relative } from "@/lib/format";
 import type { EnvironmentView, RunSummary } from "@/lib/types";
 
 /**
@@ -25,29 +25,36 @@ import type { EnvironmentView, RunSummary } from "@/lib/types";
  *
  * The console this was adapted from sends `/` to its list of environments,
  * because there the list is the whole subject: one backend, a row per stage, and
- * nothing else worth putting above it. Here the console is opened to answer a
- * question that is not about one environment — *who am I acting as, and what is
- * up* — and a redirect throws the answer away and makes the first thing on
- * screen a list of stages in an account nobody has confirmed. Two of the four
- * things that go wrong at a deploy are visible before any of them is chosen: the
- * CLI is not signed in, or it is signed in as somebody else's account.
+ * nothing worth putting above it. Here the console is opened to ask something
+ * that is not about any one environment — *who am I acting as, and what is up* —
+ * and a redirect throws that answer away. The two failures that make every other
+ * number on the screen meaningless are both about the identity: no credentials at
+ * all, and credentials for an account that is not the one these config files
+ * name. Neither is visible in a list of stack counts.
  *
- * So the root is a summary. It is deliberately **not a third list**: every
- * environment here is drawn with the same row the list uses, the same
- * `backendState` verdict and the same `DeployButton`, so a stage that says
- * "deployed" on this page says it on `/backends` and on its own page too. What
- * the page adds is the identity above it and the runs in flight — nothing that
- * disagrees with anything else.
+ * So the root is a summary, and deliberately **not a second opinion**: every
+ * environment here carries the same verdict the list gives it (`backendState`),
+ * the same stack count and the same `DeployButton`, so a stage that says
+ * "deployed" here says it on `/backends` and on its own page too. What this page
+ * adds is the identity above the rows and the runs in flight.
  *
  * `useShell()` is where the state comes from, which is why this page is a client
  * component: the shell read it once for the whole console, and a page that
  * fetched `/api/state` itself would be a second read that can disagree.
  */
 export default function RootPage() {
-  const { state, error, loading, refreshing, refresh, runs, refreshRuns } = useShell();
+  const { state, error, loading, refreshing, refresh, stages, runs, refreshRuns } = useShell();
 
   const environments = state?.environments ?? [];
-  const suggestions = state?.suggestions ?? [];
+  // What has an environment is the state; what does not is something somebody
+  // named in this session and has not created yet. The shell's `stages` is the
+  // only list either can come from — `ConsoleState.suggestions` is deliberately
+  // always empty, because a stage with no config file is not something the
+  // *server* can enumerate: naming one is a decision made on the page that
+  // deploys it.
+  const unbuilt = stages.filter(
+    (stage) => !environments.some((environment) => environment.stage === stage),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -124,10 +131,11 @@ export default function RootPage() {
               </p>
             ) : null}
 
-            {/* Four different failures arrive as four different sentences, and
-                the difference matters: an expired SSO session is a login, a
-                missing CLI is an install, and a wrong account is neither. The
-                integration page is where the details are. */}
+            {/* An expired SSO session, a machine with no CLI on it and a profile
+                for somebody else's account arrive as three different sentences,
+                and the difference matters: one is a login, one is an install,
+                and the third is neither. The integration page has the details —
+                what this page owes the reader is the sentence itself. */}
             {state.identityError ? (
               <p className="text-muted-foreground flex gap-2.5 border-t border-border/40 pt-3 text-xs leading-relaxed">
                 <TriangleAlertIcon className="text-warning mt-0.5 size-3.5 shrink-0" />
@@ -180,7 +188,7 @@ export default function RootPage() {
               ? "reading…"
               : environments.length === 0
                 ? "none yet"
-                : `${environments.length} with a config file`}
+                : plural(environments.length, "stage")}
           </span>
         </div>
 
@@ -197,9 +205,9 @@ export default function RootPage() {
 
         {/* A stage with no config file is not an environment yet — it is a name
             the plan would write one for — and it is offered here with the same
-            press, because "deploy to a new environment" is how the first one
-            starts. */}
-        {suggestions.map((stage) => (
+            press the list gives it, because "deploy to a new environment" is how
+            the first one starts. */}
+        {unbuilt.map((stage) => (
           <Card key={stage} className="border-dashed">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="min-w-0">
@@ -309,8 +317,14 @@ function EnvironmentRow({
           {blurb ? (
             <p className="text-muted-foreground mt-1.5 text-sm">{blurb}</p>
           ) : (
+            /* An importing stage gets no blurb from `backendBlurb` — the fact
+               belongs on its own tabs rather than repeated above every list —
+               so the one line this row owes is which of the three groups it
+               borrows rather than creates. */
             <p className="text-muted-foreground mt-1.5 text-sm">
-              {environment.tables} imported tables, shared with every other stage that imports them.
+              {environment.tables > 0
+                ? `${plural(environment.tables, "imported table")} — shared with every other stage that imports them.`
+                : "Imports the media and the pool it stands on rather than creating its own."}
             </p>
           )}
         </div>

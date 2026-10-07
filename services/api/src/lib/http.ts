@@ -109,6 +109,31 @@ function internalError(error: unknown): RouteResponse {
 type Route = (event: ApiEvent) => Promise<unknown>;
 
 /**
+ * The origin every response allows.
+ *
+ * `*` rather than the caller's own origin, and that is a deliberate choice rather
+ * than a shortcut. This API authenticates with an `Authorization` header and
+ * never with a cookie, so there is no ambient credential for a hostile page to
+ * ride on — which is the entire reason `Access-Control-Allow-Origin: *` is
+ * dangerous for a cookie-authenticated API and harmless for a bearer-token one.
+ * Reflecting the origin instead would mean reading it, comparing it against the
+ * environment's app URLs, and answering a preflight differently from a request —
+ * three places to get wrong, to buy nothing.
+ *
+ * It is here, in the one function every answer passes through, because API Gateway
+ * HTTP APIs apply their CORS configuration to **preflight requests only**. A REST
+ * API adds the headers to the actual response too, through `GatewayResponses`, and
+ * that is the one thing the older product does better. So the handler has to set
+ * it, and setting it in forty route files would be thirty-nine chances to forget.
+ */
+const CORS_HEADERS: Record<string, string> = {
+  'access-control-allow-origin': '*',
+  // A browser will not let a script read a header the response does not expose,
+  // and the request id is the first thing anybody pasting an error wants.
+  'access-control-expose-headers': 'x-amzn-requestid,x-amz-apigw-id',
+};
+
+/**
  * Wraps a route so every answer leaves through one door.
  *
  * The returned value is serialized as a 200 when a handler returns a plain
@@ -118,7 +143,7 @@ type Route = (event: ApiEvent) => Promise<unknown>;
 function respond(response: RouteResponse): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: response.status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...CORS_HEADERS },
     body: response.body === null ? '' : JSON.stringify(response.body),
   };
 }
@@ -213,6 +238,21 @@ export function stringField(body: Record<string, unknown>, key: string): string 
 export function requiredStringField(body: Record<string, unknown>, key: string): string {
   const value = stringField(body, key);
   if (!value) throw new HttpError(400, 'BAD_REQUEST', `${key} is required`, { field: key });
+  return value;
+}
+
+/**
+ * A number the body may carry, or nothing.
+ *
+ * Deliberately lenient where `stringField` is strict: a number here comes from
+ * something that measured a file — a browser, an image library — and its absence
+ * is meaningful ("not measured this time"), while a `NaN` written into a row is
+ * not. A value that is not a finite, non-negative number is therefore left out
+ * rather than refused, and the callers that care say so in their own comments.
+ */
+export function numberField(body: Record<string, unknown>, key: string): number | undefined {
+  const value = body[key];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
   return value;
 }
 
