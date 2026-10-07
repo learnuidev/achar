@@ -238,6 +238,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         notes: [
           'The GROQ subset is stated in `services/api/src/lib/groq`: `*`, filters, `&&`, `||`, `!`, comparisons, `in`, `match`, `defined()`, `count()`, `order()`, slices, projections, `->`, `^`, `$param` and the pipe operator. Anything outside it is a **400 naming the position**, never a silently empty result.',
           'A query that reads a `previewDrafts` perspective sees drafts; the default does not.',
+          '**A field that holds an asset is answered with its address.** An `image`, `video` or `file` field comes back as its reference *and* a `url` — the full CDN address of the bytes — at any depth in a projection, so a client draws a picture without a second request. The reference is kept because that is what can be written back; an address baked into a document stops working when the distribution changes.',
           '**A field that is portable text is answered in its canonical form**: a block’s text is one span per run of marks, not one span per keystroke. `"this is a body"` is one span, and a `strong` phrase inside it is a second — which is the shape the schema describes and the one a person can read.',
         ],
       },
@@ -302,6 +303,8 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         responseFields: DOCUMENT_FIELDS,
         notes: [
           'A document that exists only as a draft answers **404** at `published` rather than an empty body, because that is what it is: not published, and not a thing this caller can be told about.',
+          'An `image`, `video` or `file` field carries a `url` beside its reference — the full CDN address — so the answer can be drawn without a second request.',
+          'A field that is portable text is answered in its canonical form: one span per run of marks.',
         ],
       },
       {

@@ -16,6 +16,7 @@
 
 import { parse, evaluate, typeHintOf } from '../../lib/groq';
 import { requireDatasetAccess } from '../../lib/access';
+import { withAssetUrls } from '../../lib/assets';
 import { requireViewer } from '../../lib/auth';
 import {
   editableFor,
@@ -84,7 +85,10 @@ async function main(event: ApiEvent) {
   );
 
   return json({
-    result,
+    // Whatever the query projected, with the CDN address of every asset in it: a
+    // projection is a value the client did not get to choose the shape of, so this
+    // walks it rather than assuming documents.
+    result: await withAssetUrls(projectId, dataset, result),
     ms: Date.now() - started,
     perspective,
     documentsRead: page.rows.length,

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,6 +12,7 @@ import {
   TerminalIcon,
 } from "lucide-react";
 
+import flame from "@/assets/logo.png";
 import { Chip, Dot } from "@/components/ui/chip";
 import { Button, IconButton } from "@/components/ui/button";
 import { useShell, useTheme } from "@/components/console/state";
@@ -169,28 +171,24 @@ function Rail() {
 }
 
 /**
- * The mark, drawn here rather than imported.
+ * The mark, and what this app is called.
  *
- * It is the product's wordmark seen from the operator's side: the same three
- * unequal lines of a document outline — unequal, because equal bars are a
- * hamburger menu — on the console's own monochrome tile instead of the
- * product's primary colour. The console imports nothing from the shared
- * packages on purpose (see `next.config.mjs`), and a wordmark is not worth being
- * the one exception to that.
+ * The flame is the product's own, and it is **the same drawing as the studio's**:
+ * it is a file, not code, so copying it here is not the exception to the rule that
+ * the console imports nothing from the shared packages (see `next.config.mjs`) —
+ * that rule is about not sharing an implementation with the apps this app deploys.
+ * The original lives in `packages/ui/assets/logo.png`; this is that file, and the
+ * one place to change it is there, followed by a copy of it to here.
+ *
+ * It replaces a hand-drawn outline that stood in for the wordmark — three unequal
+ * bars on a monochrome tile, unequal because equal bars are a hamburger menu. It
+ * was clever and it was not the product: an operator looking at this rail should
+ * see the same flame they see in the tab, on the site and in the studio.
  */
 function Brand() {
   return (
     <div className="flex items-center gap-3 px-2">
-      <span className="bg-foreground flex size-9 shrink-0 items-center justify-center rounded-2xl">
-        <span aria-hidden className="flex flex-col gap-1">
-          {["w-4", "w-3", "w-2"].map((width) => (
-            <span key={width} className="flex items-center gap-1">
-              <span className="bg-background/70 size-1 rounded-full" />
-              <span className={cn("bg-background h-1 rounded-full", width)} />
-            </span>
-          ))}
-        </span>
-      </span>
+      <Image src={flame} alt="" aria-hidden className="h-9 w-auto shrink-0" />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="text-sm font-semibold tracking-tight">Achar</span>
         <span className="text-muted-foreground text-xs">Console</span>

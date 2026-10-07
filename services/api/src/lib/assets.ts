@@ -149,7 +149,17 @@ export function assetIdFromReference(value: unknown): string | undefined {
         : undefined;
   if (!reference) return undefined;
 
-  const match = /^(?:image|file)-([A-Za-z0-9]+)/.exec(reference);
+  // `^(image|video|file)-` and then everything up to the next dash, which is the
+  // asset id: `image-asset_e5a69d6742cf-1200x800-png` is the id `asset_e5a69d6742cf`.
+  //
+  // The pattern this replaced matched `[A-Za-z0-9]+` after the prefix, so it
+  // stopped at the **underscore** in `asset_…` and answered `"asset"` for every
+  // reference this API has ever minted — which is why no asset URL was ever
+  // resolved, on a list's media or anywhere else. It also had no `video`, so a
+  // video reference never matched at all.
+  const match = /^(?:image|video|file)-([^-]+)/.exec(reference);
+  // Anything else is taken to be an asset id already, which is the tolerant half:
+  // a hand-written document may store the id on its own.
   return match ? match[1] : reference;
 }
 
@@ -375,6 +385,83 @@ export async function deleteAsset(
     });
   }
   return existing;
+}
+
+/**
+ * The CDN address of every asset a value holds, added beside the reference.
+ *
+ * A document stores a *reference* — `image-<assetId>-<w>x<h>-<ext>` — because that
+ * is what survives a distribution moving, and a client that wants to draw the
+ * picture has to resolve it. Resolving it is this API's job: it knows the bucket,
+ * the CDN domain and the row that names the file, and a client that had to ask
+ * again for each image would be one round trip per picture on a page.
+ *
+ * **The reference is kept and `url` is added**, rather than the value being
+ * replaced by an address: a reference is what can be written back — the studio's
+ * picker, a restore of an older version, a re-upload of the same file — and an
+ * address baked into a document is a document that stops working when the
+ * distribution changes. Clients read what they need: Achar's own site reads
+ * `url ?? _ref`, and has since before this existed.
+ *
+ * One read per *distinct* asset for the whole value, so twenty references to six
+ * pictures cost six; and identity when there is nothing to resolve, so a document
+ * with no assets is walked and handed straight back.
+ */
+export async function withAssetUrls<T>(
+  projectId: string,
+  dataset: string,
+  value: T,
+): Promise<T> {
+  const references = collectAssetReferences(value);
+  if (references.length === 0) return value;
+
+  const urls = await assetUrlsForReferences(projectId, dataset, references);
+  if (urls.size === 0) return value;
+
+  return addUrls(value, urls) as T;
+}
+
+/** Every asset reference in a value, at any depth. */
+function collectAssetReferences(value: unknown, into: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectAssetReferences(entry, into);
+    return into;
+  }
+  if (typeof value !== 'object' || value === null) return into;
+
+  const record = value as Record<string, unknown>;
+  // Already resolved, which happens when a dereferenced document — one
+  // `getDocument` has been through — is walked again as part of a query's result.
+  // Looking the asset up twice would be two reads for one picture.
+  if (typeof record.url === 'string') return into;
+
+  for (const [name, entry] of Object.entries(record)) {
+    // Only a `_ref` that names an asset. A document reference is not an asset, and
+    // resolving every reference in a document would be a read per author as well.
+    if (name === '_ref' && typeof entry === 'string' && /^(?:image|video|file)-/.test(entry)) {
+      into.push(entry);
+      continue;
+    }
+    collectAssetReferences(entry, into);
+  }
+  return into;
+}
+
+/** The same value, with `url` on every asset it holds. */
+function addUrls(value: unknown, urls: Map<string, string>): unknown {
+  if (Array.isArray(value)) return value.map((entry) => addUrls(entry, urls));
+  if (typeof value !== 'object' || value === null) return value;
+
+  const record = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(record)) next[name] = addUrls(entry, urls);
+
+  if (typeof record._ref === 'string') {
+    const assetId = assetIdFromReference(record._ref);
+    const url = assetId ? urls.get(assetId) : undefined;
+    if (url) next.url = url;
+  }
+  return next;
 }
 
 /** Removes a dataset's assets, objects first. What a dataset delete is made of. */

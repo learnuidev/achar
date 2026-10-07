@@ -28,7 +28,15 @@ export function EndpointCard({ endpoint, baseUrl }: { endpoint: ApiEndpoint; bas
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <MethodBadge method={endpoint.method} />
-          <span className="min-w-0 truncate font-mono text-sm text-foreground">{endpoint.path}</span>
+          {/* Truncated rather than wrapped: a path is one token, and a card whose
+              header is four lines tall is a card nobody scans. The title carries
+              the whole thing. */}
+          <span
+            className="min-w-0 truncate font-mono text-sm text-foreground"
+            title={endpoint.path}
+          >
+            {endpoint.path}
+          </span>
           <AuthBadge auth={endpoint.auth} />
         </div>
 

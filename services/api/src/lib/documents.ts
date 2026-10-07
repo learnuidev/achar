@@ -52,6 +52,7 @@ import {
   type Key,
 } from './dynamo';
 import { coalesceSpans } from '@achar/schema';
+import { withAssetUrls } from './assets';
 import { HttpError } from './http';
 import { rev as newRev, ulid } from './ids';
 import { forgetVersions, getVersion, snapshotVersion, type SnapshotInput } from './versions';
@@ -250,6 +251,15 @@ export function resolveRows(
   return undefined;
 }
 
+/**
+ * One document, with the CDN address of every asset it holds.
+ *
+ * An image or a video field comes back as its reference **and** a `url`, resolved
+ * here rather than left to the caller: this is the one place every single-document
+ * read goes through — a read by id, a `->` dereference inside a query, and the
+ * payload a webhook delivers — so all three carry the same address and none of
+ * them needs a second request to draw a picture.
+ */
 export async function getDocument(
   projectId: string,
   dataset: string,
@@ -259,11 +269,13 @@ export async function getDocument(
 ): Promise<AcharDocument | undefined> {
   const resolved = resolveRows(await readRows(projectId, dataset, id), perspective);
   if (!resolved) return undefined;
-  return toApiDocument(resolved.row, {
+
+  const document = toApiDocument(resolved.row, {
     draft: resolved.draft,
     published: resolved.published,
     editable,
   });
+  return withAssetUrls(projectId, dataset, document);
 }
 
 /** Whether a caller of this role may change a document, which is what `_editable` says. */
