@@ -88,12 +88,30 @@ export interface Project {
 /** Whether an anonymous reader may query a dataset with a public token. */
 export type DatasetVisibility = 'PUBLIC' | 'PRIVATE';
 
-/** A content store inside a project. Documents and assets belong to one. */
+/**
+ * A content store inside a project. Documents and assets belong to one.
+ *
+ * **A dataset is where a language list lives.** Not a project, and not a
+ * document: a language is a fact about a body of content — a site is translated
+ * into Spanish and a product's release notes are not — and the dataset is the
+ * boundary that decision is made at. It is also the boundary the API already
+ * resolves on every request, which is what lets a read answer in one language
+ * without the caller having to name the set.
+ *
+ * `languages` is what may be authored; `defaultLanguage` is what a value with no
+ * translation is answered in, and what a localized field is read as when nobody
+ * says otherwise. A dataset that has never been told is an English one, so both
+ * answer something on a dataset stored before languages existed.
+ */
 export interface Dataset {
   projectId: string;
   /** The name in the URL and in every query — `production`. */
   datasetName: string;
   visibility: DatasetVisibility;
+  /** The languages its content may be authored in. Never empty. */
+  languages: string[];
+  /** Which of them an untranslated value is answered in. Always one of `languages`. */
+  defaultLanguage: string;
   documentCount: number;
   assetCount: number;
   createdAt: string;
@@ -195,6 +213,25 @@ export interface SchemaField {
   rows?: number;
   /** Which tab of the editor it belongs on. */
   group?: string;
+  /**
+   * Whether the field holds **one value per language** rather than one value.
+   *
+   * A localized field's stored value is an object keyed by language code —
+   * `{ en: "Hello", fr: "Bonjour" }` — which is the whole of the feature: the
+   * translation is a field on the document, so a document is one row in one
+   * dataset with one id, one draft and one publish, whatever it has been
+   * translated into.
+   *
+   * Which languages exist is the dataset's business, not the schema's: the same
+   * type is authored against a dataset that is English only and one that is not,
+   * and marking a field here says "this is worth translating" rather than "this
+   * has been".
+   *
+   * Not allowed on an `object`: whether `{ en: …, fr: … }` is a map of languages
+   * or the object's own fields is a question no reader could answer, so a whole
+   * object is not translatable — its fields are, one at a time.
+   */
+  localized?: boolean;
 }
 
 /** How a list of documents is ordered when it is browsed. */
@@ -258,6 +295,14 @@ export interface DocumentStub {
  * fields all begin `_`, which is the one naming rule content has to respect —
  * and a field named `_anything` is refused at the write rather than stored and
  * shadowed on the way out.
+ *
+ * **A read in a language answers with that language's values in place.**
+ * `?language=fr` turns every localized field into its French value, falling back
+ * per field to the dataset's default language, so a consumer renders a document
+ * without knowing which fields are translatable — `title` is a string, in
+ * whichever language was asked for. `shape=stored` is the exception and the
+ * point of it: an editor gets the maps, because authoring a translation means
+ * seeing all of them.
  */
 export interface AcharDocument extends DocumentStub {
   /** True when this row is the `drafts.<id>` copy rather than the published one. */
@@ -266,6 +311,22 @@ export interface AcharDocument extends DocumentStub {
   _published?: boolean;
   /** Whether the caller may change it, resolved on read like `Project.role`. */
   _editable?: boolean;
+  /**
+   * The language this answer is in — the one read, or the dataset's default when
+   * none was named. Absent on a `shape=stored` read, which answers no language.
+   */
+  _language?: string;
+  /**
+   * Localized fields that have no value in `_language` and were therefore
+   * answered from the default language, by dotted path — `title`, `seo.title`.
+   *
+   * Absent when the answer is complete, and absent on a stored read. This is the
+   * "and say so" half of falling back: a site that renders `_untranslated`'s
+   * fields is showing a translated page with English in it, and a build step can
+   * read the same list to know what still needs translating instead of comparing
+   * two documents itself.
+   */
+  _untranslated?: string[];
   [field: string]: unknown;
 }
 
@@ -284,6 +345,10 @@ export interface DocumentSummary {
   title: string;
   subtitle?: string | null;
   mediaUrl?: string | null;
+  /** The language the preview was resolved in. */
+  language: string;
+  /** Localized fields the preview read that this language has no value for. */
+  untranslated: string[];
 }
 
 /**
@@ -324,6 +389,19 @@ export interface QueryRequest {
    * written either way, because that shape was the client's choice.
    */
   shape?: 'schema' | 'stored';
+  /**
+   * The language to answer in — one of the dataset's `languages`.
+   *
+   * Absent means the dataset's `defaultLanguage`, so a query written before the
+   * dataset had a second language reads exactly as it did. A language the dataset
+   * does not have is a 400 rather than a silent fallback to the default: a typo
+   * that quietly answered in English is a typo nobody finds.
+   *
+   * It resolves *before* the query runs, so GROQ sees a document whose localized
+   * fields hold this language's values and `title` means the same thing in every
+   * query. `shape: 'stored'` is the one read that leaves the maps alone.
+   */
+  language?: string;
   /** How many documents one answer may carry, before the query's own slice. */
   limit?: number;
 }
@@ -366,13 +444,33 @@ export interface MutationResult {
  * `patch` write the draft; `publish` is what moves a draft onto the published id,
  * and `unpublish` is what takes it back off. That is why publishing is a step
  * somebody takes rather than a side effect of typing.
+ *
+ * **`_language` says which language a plain value is in.** A localized field holds
+ * one value per language, and a caller writing French should not have to know
+ * which fields those are:
+ *
+ * ```json
+ * { "patch": { "id": "post-1", "set": { "title": "Bonjour" }, "_language": "fr" } }
+ * ```
+ *
+ * A value that is already an object is taken as the map itself and written as
+ * given, key by key — which is how a caller writes two languages in one request,
+ * and how a client that has read a `shape=stored` document writes it back. Absent,
+ * `_language` is the dataset's `defaultLanguage`, so a write from before languages
+ * existed is a write in the default one.
+ *
+ * It is spelled with the `_` because a schema may declare a field called
+ * `language` — a post about languages has one — and a content field may never
+ * begin with `_`. The marker is therefore unshadowable rather than nearly so.
  */
 export interface DocumentMutation {
-  create?: { _id?: string; _type: string; [field: string]: unknown };
-  createOrReplace?: { _id: string; _type: string; [field: string]: unknown };
-  createIfNotExists?: { _id: string; _type: string; [field: string]: unknown };
+  create?: { _id?: string; _type: string; _language?: string; [field: string]: unknown };
+  createOrReplace?: { _id: string; _type: string; _language?: string; [field: string]: unknown };
+  createIfNotExists?: { _id: string; _type: string; _language?: string; [field: string]: unknown };
   patch?: {
     id: string;
+    /** The language the plain values here are in. See this type's own note. */
+    _language?: string;
     set?: Record<string, unknown>;
     setIfMissing?: Record<string, unknown>;
     unset?: string[];
@@ -647,6 +745,15 @@ export interface DatasetExport {
   exportedAt: string;
   revision: string;
   types: SchemaType[];
+  /**
+   * The languages the documents are in, and which one is the default.
+   *
+   * Here because an export is the whole of a dataset: the documents carry one
+   * value per language, and a file that arrived without the list would be a
+   * corpus whose keys mean nothing.
+   */
+  languages: string[];
+  defaultLanguage: string;
   documents: AcharDocument[];
   assets: Asset[];
 }

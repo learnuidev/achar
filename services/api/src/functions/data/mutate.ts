@@ -18,6 +18,7 @@ import { requireDatasetAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
 import { applyMutations, getDocument } from '../../lib/documents';
 import { recordDatasetChange } from '../../lib/datasets';
+import { languagesOf, sameLanguage } from '../../lib/languages';
 import {
   HttpError,
   booleanField,
@@ -28,7 +29,7 @@ import {
   withHandler,
   type ApiEvent,
 } from '../../lib/http';
-import { assertValidDocument, coerceDocumentFields, getDatasetSchema } from '../../lib/schemas';
+import { assertValidDocument, coerceDocumentFields, documentType, getDatasetSchema } from '../../lib/schemas';
 import { queueWebhookEvents } from '../../lib/webhooks';
 
 /** Exactly one of these names each element of a batch, and that is the shape. */
@@ -53,12 +54,21 @@ async function main(event: ApiEvent) {
   const mutations = assertMutations(listField(body, 'mutations') ?? []);
   const atomic = booleanField(body, 'atomic') ?? false;
 
+  // The languages a mutation may write in, checked once for the batch: a language
+  // this dataset does not have is a 400 naming the ones it does, rather than a
+  // value stored under a key no read will ever look up.
+  const datasetLanguages = languagesOf(access.dataset);
+  for (const mutation of mutations) assertKnownLanguages(mutation, datasetLanguages);
+
   // Read once for the whole batch rather than per mutation: the schema is what
   // decides whether a document is a document, and a batch that fetched it three
   // times would be three reads of a row that cannot change underneath it.
   const schema = await getDatasetSchema(projectId, dataset);
   const validate = (document: AcharDocument, stage: 'draft' | 'published'): void =>
-    assertValidDocument(schema, document, { requireComplete: stage === 'published' });
+    assertValidDocument(schema, document, {
+      requireComplete: stage === 'published',
+      defaultLanguage: datasetLanguages.defaultLanguage,
+    });
 
   const applied = await applyMutations({
     projectId,
@@ -71,6 +81,10 @@ async function main(event: ApiEvent) {
     // around one sentence is asking every client to be an editor. See
     // `coerceDocument`, and its exemption for patches.
     coerce: (fields) => coerceDocumentFields(schema, fields),
+    // What tells a write which fields hold one value per language, and which
+    // language a plain value with no `_language` of its own belongs to.
+    typeOf: (name) => documentType(schema, name),
+    defaultLanguage: datasetLanguages.defaultLanguage,
     // Recorded on the version a publish leaves behind, so a history says who
     // published what rather than only when.
     publishedBy: viewer.userId,
@@ -133,6 +147,39 @@ function eventOf(operation: MutationOperation): WebhookEvent {
   if (operation === 'delete') return 'delete';
   if (operation === 'publish') return 'publish';
   return 'update';
+}
+
+/**
+ * Refuses a mutation that names a language this dataset does not have.
+ *
+ * The check is here rather than in the store because it is about the dataset, and
+ * the store is about documents: by the time a value reached `applyDocuments` the
+ * only thing left to do with a bad code would be to store it under a key nothing
+ * reads. `publish`, `unpublish`, `delete` and `restore` name no language — they act
+ * on a row, and a row is every language at once.
+ */
+function assertKnownLanguages(
+  mutation: DocumentMutation,
+  languages: { languages: string[]; defaultLanguage: string },
+): void {
+  const bodies = [
+    mutation.create,
+    mutation.createOrReplace,
+    mutation.createIfNotExists,
+    mutation.patch,
+  ];
+
+  for (const body of bodies) {
+    const code = body?._language?.trim();
+    if (!code) continue;
+    if (languages.languages.some((known) => sameLanguage(known, code))) continue;
+
+    throw new HttpError(400, 'UNKNOWN_LANGUAGE', `This dataset is not authored in ${code}`, {
+      language: code,
+      languages: languages.languages,
+      defaultLanguage: languages.defaultLanguage,
+    });
+  }
 }
 
 /**

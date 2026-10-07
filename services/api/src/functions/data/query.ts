@@ -14,17 +14,18 @@
  * language with a private vocabulary.
  */
 
-import type { Perspective } from '@achar/types';
+import type { DatasetSchema, Perspective } from '@achar/types';
 import { parse, evaluate, typeHintOf } from '../../lib/groq';
 import { requireDatasetAccess } from '../../lib/access';
 import { withAssetUrls } from '../../lib/assets';
-import { shapeForDelivery } from '../../lib/documents';
+import { shapeForDelivery, type ReadLanguages } from '../../lib/documents';
 import { getDatasetSchema, requireDocumentShape, type DocumentShape } from '../../lib/schemas';
 import { requireViewer } from '../../lib/auth';
 import {
   editableFor,
   getDocument,
   pageRows,
+  readLanguages,
   requirePerspective,
   resolvePage,
 } from '../../lib/documents';
@@ -66,6 +67,25 @@ async function main(event: ApiEvent) {
   const ast = parse(text);
   const type = typeHintOf(ast);
 
+  /**
+   * The language the query runs in, resolved *before* the query is evaluated.
+   *
+   * That ordering is the whole design of languages in a query language: GROQ sees a
+   * document whose localized fields hold this language's values, so `title` means
+   * the same thing in every query anybody has written and no query needs a language
+   * parameter of its own. A projection over resolved documents is a projection over
+   * strings, and `_untranslated` is readable like any other field for the projects
+   * that want to mark a fallback.
+   *
+   * `shape=stored` is the one read that does not do this: the studio edits every
+   * language at once, so it is given the maps.
+   */
+  const schema = await getDatasetSchema(projectId, dataset);
+  const read: ReadLanguages | undefined =
+    shape === 'stored'
+      ? undefined
+      : readLanguages(schema, access.dataset, queryParam(event, 'language'));
+
   const page = await pageRows({
     projectId,
     dataset,
@@ -73,7 +93,7 @@ async function main(event: ApiEvent) {
     limit: Math.min(limit * 2, ROW_CEILING),
   });
 
-  const documents = await resolvePage(projectId, dataset, page.rows, perspective, editable);
+  const documents = await resolvePage(projectId, dataset, page.rows, perspective, editable, read);
 
   const result = await evaluate(
     ast,
@@ -82,8 +102,9 @@ async function main(event: ApiEvent) {
       documents,
       // A dereference names a document the fetched set may not hold — a page of
       // posts does not carry its authors — so it is resolved on demand, once per
-      // id, at the perspective this query is being answered at.
-      lookup: (id: string) => getDocument(projectId, dataset, id, perspective, editable),
+      // id, at the perspective this query is being answered at, and in the same
+      // language as the query itself.
+      lookup: (id: string) => getDocument(projectId, dataset, id, perspective, editable, read),
     },
     { this: null },
   );
@@ -92,7 +113,7 @@ async function main(event: ApiEvent) {
     // Whatever the query projected, with the CDN address of every asset in it: a
     // projection is a value the client did not get to choose the shape of, so this
     // walks it rather than assuming documents.
-    result: await shapeResult(projectId, dataset, perspective, result, shape),
+    result: await shapeResult(projectId, dataset, schema, perspective, result, shape, read),
     ms: Date.now() - started,
     perspective,
     documentsRead: page.rows.length,
@@ -111,24 +132,29 @@ async function main(event: ApiEvent) {
  *
  * `stored` skips all of it and resolves assets only, which is what the studio asks
  * for — the same answer the asset walk gave before any of this existed.
+ *
+ * The documents arriving here are already resolved for the read's language; `read`
+ * is passed on only so that a reference this walk fetches *again* — one the query
+ * did not dereference itself — is fetched in the same language.
  */
 async function shapeResult(
   projectId: string,
   dataset: string,
+  schema: DatasetSchema,
   perspective: Perspective,
   result: unknown,
   shape: DocumentShape,
+  read: ReadLanguages | undefined,
 ): Promise<unknown> {
   if (shape === 'stored') return withAssetUrls(projectId, dataset, result);
 
-  const schema = await getDatasetSchema(projectId, dataset);
   const walk = async (value: unknown): Promise<unknown> => {
     if (Array.isArray(value)) return Promise.all(value.map(walk));
     if (typeof value !== 'object' || value === null) return value;
 
     const record = value as Record<string, unknown>;
     if (typeof record._type === 'string') {
-      const shaped = await shapeForDelivery(projectId, dataset, schema, record, perspective);
+      const shaped = await shapeForDelivery(projectId, dataset, schema, record, perspective, read);
       // A type this dataset does not declare: assets are still addresses.
       return shaped === record ? withAssetUrls(projectId, dataset, record) : shaped;
     }

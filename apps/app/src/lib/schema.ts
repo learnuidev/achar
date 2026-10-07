@@ -119,10 +119,28 @@ export function isReadableField(field: SchemaField): boolean {
  * with no sensible empty value — a reference, an asset, portable text — starts
  * as `null` or `[]` rather than as an empty string, because the API's validation
  * distinguishes them and a placeholder string would be saved as content.
+ *
+ * A **localized** field starts as a map holding the default language's empty value,
+ * for the reason `initialDocument` gives: a plain `''` where a map belongs is a
+ * field the validator complains about, and a new array item that arrives marked
+ * invalid is an error somebody has to read before they have typed anything. The
+ * default language is a parameter because a language list belongs to a dataset and
+ * this function only ever sees a field — a caller that has no dataset passes none,
+ * and gets an empty map, which is blank in every language and wrong in none.
  */
-export function initialForField(field: SchemaField): unknown {
-  if (field.initialValue !== undefined) return field.initialValue;
+export function initialForField(field: SchemaField, defaultLanguage?: string): unknown {
+  if (field.initialValue !== undefined) {
+    return field.localized && defaultLanguage
+      ? { [defaultLanguage]: field.initialValue }
+      : field.initialValue;
+  }
 
+  const empty = emptyForField(field, defaultLanguage);
+  if (!field.localized) return empty;
+  return defaultLanguage ? { [defaultLanguage]: empty } : {};
+}
+
+function emptyForField(field: SchemaField, defaultLanguage?: string): unknown {
   switch (field.type) {
     case 'string':
     case 'text':
@@ -139,7 +157,9 @@ export function initialForField(field: SchemaField): unknown {
     case 'array':
       return [];
     case 'object':
-      return Object.fromEntries((field.fields ?? []).map((nested) => [nested.name, initialForField(nested)]));
+      return Object.fromEntries(
+        (field.fields ?? []).map((nested) => [nested.name, initialForField(nested, defaultLanguage)]),
+      );
     case 'portableText':
       return [];
     case 'image':

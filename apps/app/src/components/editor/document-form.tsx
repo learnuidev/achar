@@ -36,6 +36,10 @@ export interface DocumentFormProps {
    * one component that owns the field elements is the one that scrolls to them.
    */
   focusPath?: string | null;
+  /** The language the editor is on, for the fields that hold one value per language. */
+  language: string;
+  /** The dataset's default language: what a gap falls back to, in the API's own words. */
+  defaultLanguage: string;
 }
 
 export function DocumentForm({
@@ -47,6 +51,8 @@ export function DocumentForm({
   projectId,
   dataset,
   focusPath,
+  language,
+  defaultLanguage,
 }: DocumentFormProps) {
   const container = useRef<HTMLDivElement>(null);
   const groups = useMemo(() => fieldGroups(type), [type]);
@@ -85,6 +91,8 @@ export function DocumentForm({
             issues={issues}
             projectId={projectId}
             dataset={dataset}
+            language={language}
+            defaultLanguage={defaultLanguage}
           />
 
           {/* The message beside the field, so that an issue is read where it is

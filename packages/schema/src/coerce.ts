@@ -23,6 +23,10 @@
  * It is deliberately a walk of the *type* rather than a sweep of the value: the
  * only way to know that `"Hello"` is a paragraph and not a malformed string is to
  * know the field it was sent for.
+ *
+ * A **localized** field is converted language by language, and the language is part
+ * of the path each conversion is given — a block's `_key` is minted from its path,
+ * and two languages minted from one path would collide.
  */
 
 import type { SchemaField, SchemaType } from '@achar/types';
@@ -48,6 +52,20 @@ export function coerceDocument(
 
 /** One value, converted for the field it was sent for. */
 function coerce(field: SchemaField, value: unknown, path: string): unknown {
+  // A localized field holds a map, and the conversion belongs to each language's
+  // value rather than to the map. The language is part of the path for a reason
+  // `blocksFromText` cares about: it names the `_key` of every block it makes, and
+  // two languages sharing a path would produce two blocks with one key.
+  if (field.localized) {
+    if (!isRecord(value)) return value;
+    const next = { ...value };
+    const inner: SchemaField = { ...field, localized: false };
+    for (const [language, entry] of Object.entries(value)) {
+      next[language] = coerce(inner, entry, `${path}.${language}`);
+    }
+    return next;
+  }
+
   switch (field.type) {
     case 'portableText':
       return typeof value === 'string' ? blocksFromText(value, path) : value;

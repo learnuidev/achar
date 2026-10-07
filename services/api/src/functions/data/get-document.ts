@@ -17,6 +17,7 @@ import { requireViewer } from '../../lib/auth';
 import {
   editableFor,
   getDocument,
+  readLanguages,
   requirePerspective,
   publishedIdOf,
   shapeForDelivery,
@@ -38,17 +39,31 @@ async function main(event: ApiEvent) {
   // and both spellings mean the same document here.
   const id = publishedIdOf(docId);
 
-  const document = await getDocument(projectId, dataset, id, perspective, editableFor(access.role));
+  // `?shape=schema` by default: what a site renders. The studio asks for `stored`,
+  // because an editor edits references rather than the documents they name — and
+  // edits every language at once, which is why the stored shape is read in none.
+  const shape = requireDocumentShape(queryParam(event, 'shape'));
+  const schema = await getDatasetSchema(projectId, dataset);
+  const read =
+    shape === 'stored'
+      ? undefined
+      : readLanguages(schema, access.dataset, queryParam(event, 'language'));
+
+  const document = await getDocument(
+    projectId,
+    dataset,
+    id,
+    perspective,
+    editableFor(access.role),
+    read,
+  );
   if (!document) {
     throw new HttpError(404, 'DOCUMENT_NOT_FOUND', `Document ${id} not found`, { documentId: id });
   }
 
-  // `?shape=schema` by default: what a site renders. The studio asks for `stored`,
-  // because an editor edits references rather than the documents they name.
-  const shape = requireDocumentShape(queryParam(event, 'shape'));
   if (shape === 'stored') return json(document);
 
-  return json(await shapeForDelivery(projectId, dataset, await getDatasetSchema(projectId, dataset), document, perspective));
+  return json(await shapeForDelivery(projectId, dataset, schema, document, perspective, read));
 }
 
 export const handler = withHandler(main);

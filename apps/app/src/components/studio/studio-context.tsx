@@ -31,6 +31,15 @@ export interface StudioContextValue {
    * was opened with — a type editor that appears to have done nothing.
    */
   refreshSchema: () => void;
+  /**
+   * Re-read the dataset's own row, after something wrote to it.
+   *
+   * Languages and visibility live on that row rather than on the schema, so the
+   * argument above applies one level up: a card that changes either has to say so,
+   * or every screen drawn from the row — including the editor's language lane —
+   * keeps showing the list it was opened with.
+   */
+  refreshDataset: () => void;
   /** The caller may write content here. */
   canEdit: boolean;
   /** The caller may manage the project and its people. */
@@ -46,6 +55,7 @@ export function StudioProvider({
   schema,
   types,
   refreshSchema,
+  refreshDataset,
   children,
 }: {
   project: Project;
@@ -54,6 +64,7 @@ export function StudioProvider({
   schema: DatasetSchema;
   types: SchemaType[];
   refreshSchema: () => void;
+  refreshDataset: () => void;
   children: ReactNode;
 }) {
   const value = useMemo<StudioContextValue>(
@@ -65,10 +76,11 @@ export function StudioProvider({
       schema,
       types,
       refreshSchema,
+      refreshDataset,
       canEdit: canEdit(project.role),
       canAdmin: canAdmin(project.role),
     }),
-    [project, dataset, datasetInfo, schema, types, refreshSchema],
+    [project, dataset, datasetInfo, schema, types, refreshSchema, refreshDataset],
   );
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

@@ -26,12 +26,23 @@ import {
 import { HttpError } from './http';
 import { deleteAssetsOfProject } from './assets';
 import { deleteRowsOfDataset } from './documents';
+import { DEFAULT_LANGUAGE, languagesOf, requireLanguages, sameLanguage } from './languages';
 import { deleteSchema } from './schemas';
 
 export interface DatasetRecord extends Item {
   projectId: string;
   datasetName: string;
   visibility: DatasetVisibility;
+  /**
+   * The languages this dataset's content may be authored in, and which one a
+   * missing translation falls back to.
+   *
+   * Optional on the record and required on `Dataset`: rows written before
+   * languages existed have neither attribute, and `languagesOf` is the one place
+   * that decides what such a row means.
+   */
+  languages?: string[];
+  defaultLanguage?: string;
   documentCount: number;
   assetCount: number;
   createdAt: string;
@@ -40,10 +51,14 @@ export interface DatasetRecord extends Item {
 }
 
 export function toDataset(record: DatasetRecord): Dataset {
+  const languages = languagesOf(record);
+
   return {
     projectId: record.projectId,
     datasetName: record.datasetName,
     visibility: record.visibility,
+    languages: languages.languages,
+    defaultLanguage: languages.defaultLanguage,
     documentCount: record.documentCount ?? 0,
     assetCount: record.assetCount ?? 0,
     createdAt: record.createdAt,
@@ -96,14 +111,33 @@ export interface CreateDatasetInput {
   projectId: string;
   datasetName: string;
   visibility: DatasetVisibility;
+  /** The languages to start with, or nothing for the default English alone. */
+  languages?: string[];
+  defaultLanguage?: string;
 }
 
+/**
+ * Makes a dataset, in one language until somebody says otherwise.
+ *
+ * A dataset is created with `languages: ['en']` rather than with no answer at all:
+ * a content store whose languages are undefined is a store whose every read has to
+ * decide what to do about it, and "English, change it when you know" is one PATCH
+ * away from anything else. A caller that knows better passes `languages` and
+ * `defaultLanguage` and gets them instead.
+ */
 export async function createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
   const now = new Date().toISOString();
+  const languages =
+    input.languages === undefined
+      ? { languages: [DEFAULT_LANGUAGE], defaultLanguage: DEFAULT_LANGUAGE }
+      : requireLanguages(input.languages, input.defaultLanguage);
+
   const record: DatasetRecord = {
     projectId: input.projectId,
     datasetName: input.datasetName,
     visibility: input.visibility,
+    languages: languages.languages,
+    defaultLanguage: languages.defaultLanguage,
     documentCount: 0,
     assetCount: 0,
     createdAt: now,
@@ -122,13 +156,59 @@ export async function createDataset(input: CreateDatasetInput): Promise<DatasetR
   return record;
 }
 
+/**
+ * Changes a dataset's visibility, its languages, or which language is the default.
+ *
+ * **Removing a language does not delete content.** A document that was written in
+ * French keeps its French values, unreadable until the language comes back — which
+ * is the only safe way to spell "we are dropping French for now", and the reason
+ * resolution ignores a language a dataset does not have rather than treating the
+ * value as corrupt. The alternative, rewriting every document on a settings write,
+ * would be a migration with no confirmation step.
+ */
 export async function updateDataset(
   projectId: string,
   datasetName: string,
-  patch: { visibility?: DatasetVisibility },
+  patch: {
+    visibility?: DatasetVisibility;
+    languages?: unknown;
+    defaultLanguage?: unknown;
+  },
 ): Promise<DatasetRecord> {
   const set: Record<string, unknown> = { updatedAt: new Date().toISOString() };
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
+
+  if (patch.languages !== undefined || patch.defaultLanguage !== undefined) {
+    // Read first, because a `defaultLanguage` on its own has to be checked against
+    // the list the dataset already has, and because a list that arrives without a
+    // default keeps the current one when it is still in the list.
+    const current = await getDataset(projectId, datasetName);
+    if (!current) throw new HttpError(404, 'DATASET_NOT_FOUND', 'Dataset not found');
+
+    if (patch.languages === undefined) {
+      const wanted = typeof patch.defaultLanguage === 'string' ? patch.defaultLanguage : '';
+      const winner = (current.languages ?? []).find((code) => sameLanguage(code, wanted));
+      if (!winner) {
+        throw new HttpError(
+          400,
+          'BAD_REQUEST',
+          `defaultLanguage ${wanted} is not one of this dataset's languages`,
+          { field: 'defaultLanguage', languages: current.languages ?? [] },
+        );
+      }
+      set.defaultLanguage = winner;
+    } else {
+      // The current default is offered as the default of the new list, so that
+      // adding a language does not quietly move which one an untranslated value
+      // falls back to; `requireLanguages` verifies it is still in the list.
+      const languages = requireLanguages(
+        patch.languages,
+        patch.defaultLanguage ?? (current.defaultLanguage ?? undefined),
+      );
+      set.languages = languages.languages;
+      set.defaultLanguage = languages.defaultLanguage;
+    }
+  }
 
   const updated = await updateItem<DatasetRecord>(
     'DatasetsTable',

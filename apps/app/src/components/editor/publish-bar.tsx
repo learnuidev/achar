@@ -47,6 +47,7 @@ export function PublishBar({
   busy,
   previewOpen,
   history,
+  languageSwitch,
   onTogglePreview,
   onSave,
   onPublish,
@@ -68,6 +69,15 @@ export function PublishBar({
   previewOpen: boolean;
   /** The history action, drawn beside Preview: both are ways of looking at the document. */
   history?: React.ReactNode;
+  /**
+   * Which language the fields are edited in, drawn beside Preview.
+   *
+   * A view of the document rather than a property of it — the same argument as the
+   * preview button — which is why it is a slot here instead of a control inside the
+   * form: switching language changes nothing about the document, and a control next
+   * to the fields would read as one that does.
+   */
+  languageSwitch?: React.ReactNode;
   onTogglePreview: () => void;
   onSave: () => void;
   onPublish: () => void;
@@ -90,6 +100,7 @@ export function PublishBar({
 
         <div className="ml-auto flex items-center gap-2">
           {history}
+          {languageSwitch}
           <Button
             type="button"
             variant="ghost"

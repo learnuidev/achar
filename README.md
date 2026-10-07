@@ -44,7 +44,7 @@ says what a document of each type may contain.
 }
 ```
 
-Two splits carry the whole design, and both are visible from the outside:
+Three splits carry the whole design, and all three are visible from the outside:
 
 - **A document is a draft or it is published, and the pair is the point.** The
   draft is the row whose id begins `drafts.`; the published one is the row. They
@@ -54,6 +54,12 @@ Two splits carry the whole design, and both are visible from the outside:
   documents, assets and the schema; an `ADMIN` also manages who is in the room. A
   learner of the public API with a token gets exactly the dataset and role the
   token names.
+- **A document can be read in any of its dataset's languages.** A field marked
+  `localized` holds one value per language — `{ en: "Hello", fr: "Bonjour" }` — so a
+  translation is a field on the document rather than a document beside it, and one
+  French title still being written does not hold up publishing the English one. A
+  read asks for `?language=fr`, falls back per field to the dataset's default
+  language, and names the fields it had to fall back on.
 
 ## Quick start
 

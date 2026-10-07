@@ -153,7 +153,31 @@ const DOCUMENT_FIELDS: ApiField[] = [
   { name: '_draft', type: 'boolean', description: 'True when this is the `drafts.<id>` row.' },
   { name: '_published', type: 'boolean', description: 'Whether a published row exists beside it.' },
   { name: '_editable', type: 'boolean', description: 'Whether the caller may change it, resolved on read like `Project.role`.' },
+  { name: '_language', type: 'string', description: 'The language this answer is in — the one asked for, or the dataset’s default.' },
+  {
+    name: '_untranslated',
+    type: 'string[]',
+    description:
+      'The localized fields this document has no value for in `_language`, by path. They are answered from the default language, and this is how a page knows to mark one or a build step knows to translate it. Absent when there is nothing missing.',
+  },
 ];
+
+/**
+ * The language to answer in.
+ *
+ * A query parameter rather than part of the query language, because the language is
+ * a fact about the *dataset* rather than about what somebody is asking for: GROQ
+ * sees a document whose localized fields already hold this language's values, so
+ * `title` means one thing in every query anybody writes.
+ */
+const LANGUAGE: ApiParameter = {
+  in: 'query',
+  name: 'language',
+  type: 'string',
+  description:
+    'One of the dataset’s languages, as it spells it — `fr`, `pt-BR`. Defaults to the dataset’s default language. A language the dataset does not have is a 400 listing the ones it does. Localized fields are answered in it, falling back per field to the default language and naming what fell back in `_untranslated`.',
+  example: 'fr',
+};
 
 export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
   {
@@ -219,6 +243,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           },
           PERSPECTIVE,
           SHAPE,
+          LANGUAGE,
         ],
         responseStatus: '200 OK',
         responseExample: `{
@@ -281,6 +306,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           { in: 'query', name: 'search', type: 'string', description: 'Filters the page by the text the preview draws.' },
           { in: 'query', name: 'order', type: 'string', description: 'One of the type’s declared orderings, by name.' },
           PERSPECTIVE,
+          LANGUAGE,
         ],
         responseStatus: '200 OK',
         responseExample: `{
@@ -309,7 +335,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         description:
           'A document by id, at one perspective. `published` is the default because that is what a site serves; an editor asks for `previewDrafts` by name.',
         auth: 'token',
-        parameters: [PROJECT_ID, DATASET, DOCUMENT_ID, PERSPECTIVE, SHAPE],
+        parameters: [PROJECT_ID, DATASET, DOCUMENT_ID, PERSPECTIVE, SHAPE, LANGUAGE],
         responseStatus: '200 OK',
         responseExample: `{
   "_id": "hello-world",
@@ -368,6 +394,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           '**A rich-text field takes a plain string**, so nothing has to know the shape of Portable Text to write it: `"body": "First line\\n\\nSecond paragraph"` is stored as one paragraph block per line, with blank lines dropped. A field that is already an array of blocks is stored exactly as sent, which is what the studio does.',
           '**A mutation never writes the published row directly.** `create`, `createOrReplace`, `createIfNotExists`, `patch` and `restore` write the **draft**; `publish` is what moves a draft onto the published id, and `unpublish` takes it back off. That is why publishing is a step somebody takes rather than a side effect of typing — and why a site sees nothing until it has been taken.',
           'A string is read as blocks on a **create**, not on a `patch`. A patch edits fields of a document that already exists, so it sends the nodes it read back — a client that has the document has them.',
+          '**A localized field holds one value per language, and a write says which language a plain value is in** with `_language` — `{"patch": {"id": "hello", "set": {"title": "Bonjour"}, "_language": "fr"}}`. Omit it and the value is written in the dataset’s default language. A value that is already an object is taken as the map itself, which is how one element writes two languages; a patch’s `unset` paths are taken as written, so `title` removes the field and `title.fr` removes one language.',
           'A **draft may be missing a required field** — that is what a draft is for. Publishing is where a document has to be whole, and it is refused with the fields it is missing.',
           'Every publish is recorded: `GET …/versions` is the history of what a document has said, and `restore` puts one of those back as the draft.',
           'A token needs the `EDITOR` role or better to write. See **Tokens** for what a role reaches.',
@@ -405,6 +432,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           DATASET,
           DOCUMENT_ID,
           { in: 'path', name: 'version', type: 'integer', required: true, description: 'The version number, from the history.', example: '1' },
+          LANGUAGE,
         ],
         responseStatus: '200 OK',
         responseExample: `{

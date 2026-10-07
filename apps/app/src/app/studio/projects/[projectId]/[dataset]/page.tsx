@@ -8,6 +8,7 @@ import { Card, CardContent, Skeleton } from '@achar/ui';
 import { EmptyState, ErrorNote, ReadOnlyNote } from '@/components/ui/empty-state';
 import { PageHeader, StatBlock } from '@/components/ui/page-header';
 import { useAssetLibrary } from '@/components/studio/asset-library';
+import { DatasetLanguagesCard } from '@/components/studio/dataset-languages-card';
 import { useStudio } from '@/components/studio/studio-context';
 import { useContentStats } from '@/hooks/use-content-stats';
 import { relativeTime } from '@/lib/format';
@@ -31,7 +32,7 @@ export default function DatasetOverviewPage({
   params: Promise<{ projectId: string; dataset: string }>;
 }) {
   const { projectId, dataset } = use(params);
-  const { types, schema, canEdit, datasetInfo } = useStudio();
+  const { types, schema, canEdit, datasetInfo, refreshDataset } = useStudio();
   const stats = useContentStats(projectId, dataset, types);
   const assets = useAssetLibrary();
 
@@ -156,6 +157,13 @@ export default function DatasetOverviewPage({
           </div>
         )}
       </section>
+
+      {/* A dataset's own setting rather than its content, which is why it comes last —
+          a project's settings follow its datasets the same way. It is also the one
+          panel here that the shell's read of the dataset row can leave undrawn. */}
+      {datasetInfo && (
+        <DatasetLanguagesCard dataset={datasetInfo} canEdit={canEdit} onChanged={refreshDataset} />
+      )}
     </div>
   );
 }

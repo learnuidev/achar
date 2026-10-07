@@ -23,6 +23,7 @@ import {
   Skeleton,
 } from '@achar/ui';
 import { DocumentPreview } from '@/components/editor/document-preview';
+import { useStudio } from '@/components/studio/studio-context';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { useAction } from '@/hooks/use-resource';
 import { useMembers } from '@/hooks/use-members';
@@ -66,6 +67,10 @@ export function DocumentHistoryDialog({
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // Which language a version's preview is drawn in: the dataset's default, because
+  // that is the language the version route answers in when nobody asks for one.
+  const { datasetInfo } = useStudio();
+  const defaultLanguage = datasetInfo?.defaultLanguage ?? 'en';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -88,6 +93,7 @@ export function DocumentHistoryDialog({
             documentId={documentId}
             type={type}
             canEdit={canEdit}
+            defaultLanguage={defaultLanguage}
             onRestored={() => {
               setOpen(false);
               onRestored();
@@ -105,6 +111,7 @@ function HistoryBody({
   documentId,
   type,
   canEdit,
+  defaultLanguage,
   onRestored,
 }: {
   projectId: string;
@@ -112,6 +119,8 @@ function HistoryBody({
   documentId: string;
   type: SchemaType;
   canEdit: boolean;
+  /** The language a version is drawn in — the dataset's, which is what it is read in. */
+  defaultLanguage: string;
   onRestored: () => void;
 }) {
   const versions = useDocumentVersions(projectId, dataset, documentId);
@@ -176,7 +185,16 @@ function HistoryBody({
         </DialogHeader>
 
         <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border p-4">
-          <DocumentPreview type={type} value={viewing.document} />
+          {/* The version route answers in the dataset's default language unless it is
+              asked for another, so the preview is told that rather than the editor's
+              language: this screen is about *when*, and following the language on
+              screen would be a read per switch for a question nobody asks here. */}
+          <DocumentPreview
+            type={type}
+            value={viewing.document}
+            language={viewing.document._language ?? defaultLanguage}
+            defaultLanguage={defaultLanguage}
+          />
         </div>
 
         {canEdit && (

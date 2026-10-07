@@ -3,6 +3,7 @@ import { requireDatasetAccess } from '../../lib/access';
 import { listAssets, toAsset } from '../../lib/assets';
 import { requireViewer } from '../../lib/auth';
 import { listAllRows, toApiDocument } from '../../lib/documents';
+import { languagesOf } from '../../lib/languages';
 import { pathParam, withHandler } from '../../lib/http';
 import { getDatasetSchema } from '../../lib/schemas';
 
@@ -15,13 +16,19 @@ import { getDatasetSchema } from '../../lib/schemas';
  * right is not portable. Drafts travel with it — the export is of the content,
  * not of what happens to be published — and every entry says which of the two
  * rows it came from.
+ *
+ * **The documents are exported as stored, every language at once**, and the
+ * languages they are in travel with them: a file that carried one language's values
+ * would be a file somebody could not tell from a monolingual dataset, and an export
+ * is the one artefact where "what does this corpus actually contain" has to be
+ * answerable without the API it came from.
  */
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
   const projectId = pathParam(event, 'projectId');
   const dataset = pathParam(event, 'dataset');
 
-  await requireDatasetAccess(projectId, dataset, viewer, 'read');
+  const access = await requireDatasetAccess(projectId, dataset, viewer, 'read');
 
   const [schema, rows, assets] = await Promise.all([
     getDatasetSchema(projectId, dataset),
@@ -43,12 +50,15 @@ export const handler = withHandler(async (event) => {
       toApiDocument(row, { draft: row.draft, published: published.has(row._id), editable: false }),
     );
 
+  const languages = languagesOf(access.dataset);
   const exported: DatasetExport = {
     projectId,
     dataset,
     exportedAt: new Date().toISOString(),
     revision: schema.revision,
     types: schema.types,
+    languages: languages.languages,
+    defaultLanguage: languages.defaultLanguage,
     documents,
     assets: assets.map(toAsset),
   };

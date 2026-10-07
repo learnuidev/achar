@@ -21,7 +21,7 @@
  * under the wrong name would be reading somebody else's content model.
  */
 
-import type { DatasetSchema, SchemaType } from '@achar/types';
+import type { DatasetSchema, SchemaField, SchemaType } from '@achar/types';
 import { coerceDocument, previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
 import { createHash } from 'node:crypto';
 import { Keys, deleteItem, getItem, putItem, tryUpdateItem, type Item } from './dynamo';
@@ -303,6 +303,16 @@ function canonical(value: unknown): string {
  * its types are written by whoever owns it, and deleting the last one is how
  * somebody starts over. A rule against it would be a rule against the only way
  * back to an empty dataset.
+ *
+ * The second rule is the one languages need, and it is structural for the same
+ * reason: **an `object` field may not be localized.** A stored object is either the
+ * object's own fields or a map of languages, and for an object field there is no way
+ * to tell — `{ en: { … } }` is a field called `en` and a translation at the same
+ * time. A leaf field has no such ambiguity: an object where a string belongs is a
+ * map and nothing else, which is what makes resolution decidable at all (see
+ * `isLanguageMap` in `@achar/schema`). An object whose fields each need translating
+ * marks them one at a time, which is also the answer that lets one of them ship
+ * translated before the others.
  */
 function assertUsableTypes(types: SchemaType[]): void {
   if (!Array.isArray(types)) {
@@ -322,7 +332,31 @@ function assertUsableTypes(types: SchemaType[]): void {
       });
     }
     seen.add(type.name);
+
+    const [offending] = localizedObjectPaths(type.fields);
+    if (offending) {
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        `${type.name}.${offending} is an object marked localized — an object cannot hold one value per language, so mark its fields instead`,
+        { field: 'types', type: type.name, path: offending },
+      );
+    }
   }
+}
+
+/** The paths of fields that are both an `object` and localized, at any depth. */
+function localizedObjectPaths(fields: SchemaField[], prefix = ''): string[] {
+  const found: string[] = [];
+
+  for (const field of fields) {
+    const path = prefix ? `${prefix}.${field.name}` : field.name;
+    if (field.localized && field.type === 'object') found.push(path);
+    if (field.fields?.length) found.push(...localizedObjectPaths(field.fields, path));
+    if (field.of?.length) found.push(...localizedObjectPaths(field.of, path));
+  }
+
+  return found;
 }
 
 /**
@@ -387,11 +421,17 @@ export function coerceDocumentFields(
  * draft may be missing a required field — that is what a draft is for — so the
  * write path passes `false` and publishing passes `true`. Shapes are checked
  * either way: a number where the schema says string is a mistake in a draft too.
+ *
+ * **`defaultLanguage` is the same line drawn across languages.** A localized field
+ * that is required has to be there in the dataset's default language and nowhere
+ * else: a translation arrives after the document does, so a French title that is
+ * still being written must not hold up publishing the English one. A caller that
+ * does not pass it gets the weaker rule — some language has to hold something.
  */
 export function assertValidDocument(
   schema: DatasetSchema,
   document: Record<string, unknown>,
-  options: { requireComplete?: boolean } = {},
+  options: { requireComplete?: boolean; defaultLanguage?: string } = {},
 ): void {
   const name = typeof document._type === 'string' ? document._type : '';
   const type = documentType(schema, name);

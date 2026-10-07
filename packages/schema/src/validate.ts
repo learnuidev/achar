@@ -34,6 +34,20 @@ export interface ValidateOptions {
    * passes false.
    */
   requireComplete?: boolean;
+  /**
+   * The language a localized field's `required` is judged in — the dataset's
+   * default, in practice.
+   *
+   * **Only that one language is required, and it is the same split as
+   * draft/publish.** A translation arrives after the document does, so a required
+   * field that is present in English and absent in French is a document waiting for
+   * its translator rather than one that is wrong; refusing it would mean a
+   * translated site could not be published until every language was finished at
+   * once. Which languages exist is the dataset's business and never reaches here —
+   * a caller that does not know gives no default, and then any non-empty map
+   * satisfies `required`.
+   */
+  defaultLanguage?: string;
 }
 
 export function validateDocument(
@@ -60,6 +74,14 @@ function checkField(
   options: ValidateOptions,
 ): void {
   const complete = options.requireComplete ?? true;
+
+  // Before the dispatch rather than inside it, because every branch below reads the
+  // value as the leaf it declares: `must be a string` is the right sentence about a
+  // string and the wrong one about a map of languages. See `checkLocalized`.
+  if (field.localized) {
+    checkLocalized(field, value, path, issues, options);
+    return;
+  }
 
   if (value === undefined || value === null) {
     if (field.required && complete) issues.push({ path, message: 'is required' });
@@ -126,6 +148,65 @@ function checkField(
       checkObject(field, value, path, issues, options);
       return;
   }
+}
+
+/**
+ * A field that holds one value per language.
+ *
+ * Every language in the map is checked as the field's own type, at the language's
+ * own path — `title.fr` — so a form marks the French one rather than the field, and
+ * the message a person reads names the box they typed in.
+ *
+ * Two things are deliberately *not* issues. A language the dataset does not declare
+ * is kept rather than refused: dropping a language from a dataset must not make
+ * every document that still holds it unwritable, and the dataset is where that
+ * decision is enforced (the API refuses a language it does not have when a write
+ * names one). And a language with no value is fine, in every case except `required`
+ * in the default language — see `ValidateOptions.defaultLanguage`.
+ */
+function checkLocalized(
+  field: SchemaField,
+  value: unknown,
+  path: string,
+  issues: SchemaIssue[],
+  options: ValidateOptions,
+): void {
+  const complete = options.requireComplete ?? true;
+  const inner: SchemaField = { ...field, localized: false };
+
+  if (value === undefined || value === null) {
+    if (field.required && complete) {
+      issues.push({ path, message: requiredMessage(field, options.defaultLanguage) });
+    }
+    return;
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    issues.push({ path, message: 'must hold one value per language' });
+    return;
+  }
+
+  const map = value as Record<string, unknown>;
+  for (const [language, entry] of Object.entries(map)) {
+    checkField(inner, entry, `${path}.${language}`, issues, options);
+  }
+
+  if (!field.required || !complete) return;
+
+  // No default named is no opinion about which language has to be there, so the
+  // field is satisfied by any language holding something.
+  const inDefault =
+    options.defaultLanguage === undefined
+      ? Object.values(map).some((entry) => !isBlank(entry))
+      : !isBlank(map[options.defaultLanguage]) && map[options.defaultLanguage] !== undefined;
+
+  if (!inDefault) {
+    issues.push({ path, message: requiredMessage(field, options.defaultLanguage) });
+  }
+}
+
+function requiredMessage(field: SchemaField, defaultLanguage: string | undefined): string {
+  return defaultLanguage ? `is required in ${defaultLanguage}` : 'is required';
 }
 
 function checkPlainString(

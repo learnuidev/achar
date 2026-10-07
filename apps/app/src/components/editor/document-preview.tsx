@@ -4,7 +4,7 @@ import type { PortableText as PortableTextValue, SchemaFieldType, SchemaType } f
 import { PortableText as PortableTextRenderer } from '@/components/studio/portable-text';
 import { useAssetLibrary } from '@/components/studio/asset-library';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { previewOf } from '@achar/schema';
+import { previewOf, resolveLanguages } from '@achar/schema';
 
 /**
  * The document as a reader would see it.
@@ -19,16 +19,28 @@ import { previewOf } from '@achar/schema';
  * It shows the value the form is holding, not the published one, which is the
  * point: the question it answers is "what would this read like if I published
  * it now".
+ *
+ * **One language, resolved the way a read is.** The form holds every language at
+ * once, so the document is answered in the language on screen before anything is
+ * drawn — a fallback per field, which is what a reader in that language would
+ * actually be served. Without that this panel would draw a map of languages where
+ * the site draws a sentence, and a preview that lies about the site is worse than
+ * no preview at all.
  */
 export function DocumentPreview({
   type,
   value,
+  language,
+  defaultLanguage,
 }: {
   type: SchemaType;
   value: Record<string, unknown>;
+  language: string;
+  defaultLanguage: string;
 }) {
   const library = useAssetLibrary();
-  const preview = previewOf(type, value);
+  const answered = resolveLanguages(type, value, { language, defaultLanguage }).document;
+  const preview = previewOf(type, answered);
   const fields = type.fields.filter((field) => !field.hidden);
 
   // The fields whose value is already the preview's own heading or subheading
@@ -59,7 +71,7 @@ export function DocumentPreview({
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               {field.title || field.name}
             </p>
-            <FieldValue field={field.type} value={value[field.name]} urlFor={library.urlFor} />
+            <FieldValue field={field.type} value={answered[field.name]} urlFor={library.urlFor} />
           </section>
         ))}
       </div>

@@ -176,7 +176,11 @@ export class AcharClient {
     return datasets.getDataset(this.context, projectId, dataset);
   }
 
-  /** The one edit a dataset takes: whether an anonymous reader may query it. */
+  /**
+   * What a dataset *is* rather than what is in it: its visibility, and the languages
+   * its content may be authored in — the list is written whole, so adding French
+   * means sending the list you have plus it. See `UpdateDatasetBody`.
+   */
   updateDataset(
     projectId: string,
     dataset: string,

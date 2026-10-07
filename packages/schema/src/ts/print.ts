@@ -57,6 +57,14 @@ function printMember(field: SchemaField): string {
  * more of a field's type than `string` is.
  */
 function printShape(field: SchemaField): string {
+  const inner = printInnerShape(field);
+  // Outermost, and around the whole shape: `Localized<string[]>` is a list per
+  // language, and `Localized<string>[]` — what wrapping only the scalar would
+  // print — is a list whose items are each translated, which is a different field.
+  return field.localized ? `Localized<${inner}>` : inner;
+}
+
+function printInnerShape(field: SchemaField): string {
   if (field.type === 'string' && field.options?.length) {
     return field.options.map((option) => quote(option.value)).join(' | ');
   }

@@ -54,7 +54,7 @@ import {
   type Item,
   type Key,
 } from './dynamo';
-import { coalesceSpans, referenceIdOf, shapeDocument } from '@achar/schema';
+import { coalesceSpans, fieldByPath, isLanguageMap, localizeFields, referenceIdOf, resolveLanguages, shapeDocument } from '@achar/schema';
 import {
   assetIdFromReference,
   assetUrlsForReferences,
@@ -62,6 +62,7 @@ import {
   withAssetUrls,
 } from './assets';
 import { documentType } from './schemas';
+import { DEFAULT_LANGUAGE, languagesOf, readLanguage } from './languages';
 import { HttpError } from './http';
 import { rev as newRev, ulid } from './ids';
 import { forgetVersions, getVersion, snapshotVersion, type SnapshotInput } from './versions';
@@ -116,7 +117,13 @@ export interface DocumentRow extends Item {
   draft: boolean;
 }
 
-/** Attributes of a row that are ours, and that a content field may never shadow. */
+/**
+ * Attributes of a row that are ours, and that a content field may never shadow.
+ *
+ * `_language` is in `INTERNAL_ATTRIBUTES` for the second half of that sentence and
+ * not the first: a document's language is derived on every read rather than stored,
+ * so a row that somehow holds one must not answer with it.
+ */
 const INTERNAL_ATTRIBUTES = new Set([
   'documentKey',
   'datasetKey',
@@ -125,7 +132,20 @@ const INTERNAL_ATTRIBUTES = new Set([
   '_rev',
   '_createdAt',
   '_updatedAt',
+  '_language',
+  '_untranslated',
 ]);
+
+/**
+ * The `_`-prefixed names a write may carry, because they are the write's own.
+ *
+ * `_id` and `_type` say what is being written and `_language` says which language a
+ * plain value is in — all three are read by this file and none of them is a field.
+ * Everything else beginning `_` is refused: a name that belongs to the system is
+ * stored and then shadowed on the way out, so it reads back as something other than
+ * what was written, and the write is where that can still be said.
+ */
+const WRITABLE_SYSTEM_FIELDS = new Set(['_id', '_type', '_language']);
 
 /**
  * Refuses a field this file would later have to shadow.
@@ -138,7 +158,9 @@ const INTERNAL_ATTRIBUTES = new Set([
  */
 export function assertWritableFields(fields: Record<string, unknown>): void {
   for (const name of Object.keys(fields)) {
-    const reserved = INTERNAL_ATTRIBUTES.has(name) || (name.startsWith('_') && name !== '_id' && name !== '_type');
+    const reserved =
+      INTERNAL_ATTRIBUTES.has(name) ||
+      (name.startsWith('_') && !WRITABLE_SYSTEM_FIELDS.has(name));
     if (reserved) {
       throw new HttpError(400, 'BAD_REQUEST', `A field may not be named ${name}`, { field: name });
     }
@@ -159,18 +181,25 @@ export function assertWritableFields(fields: Record<string, unknown>): void {
 export function toApiDocument(
   row: DocumentRow,
   flags: { draft: boolean; published: boolean; editable: boolean },
+  read?: ReadLanguages,
 ): AcharDocument {
   const document: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(row)) {
     if (INTERNAL_ATTRIBUTES.has(name)) continue;
     document[name] = coalesceSpans(value);
   }
-  return {
+  const answered = {
     ...document,
     _draft: flags.draft,
     _published: flags.published,
     _editable: flags.editable,
   } as AcharDocument;
+
+  // `read` is what makes this the single funnel for a language as well: a caller
+  // that has one gets the document answered in it, and the callers that do not —
+  // an export, a webhook payload, the document a publish validates — get the rows,
+  // which is what all three of them want.
+  return read ? answeredInLanguage(read.schema, answered, read) : answered;
 }
 
 export interface DocumentRows {
@@ -282,6 +311,7 @@ export async function shapeForDelivery(
   schema: DatasetSchema,
   document: Record<string, unknown>,
   perspective: Perspective,
+  read?: ReadLanguages,
 ): Promise<Record<string, unknown>> {
   const type = documentType(schema, typeof document._type === 'string' ? document._type : '');
   // Not a type this dataset declares: nothing to shape it by, and a schema is not a
@@ -290,7 +320,10 @@ export async function shapeForDelivery(
 
   const entities = new Map<string, { type: SchemaType; document: Record<string, unknown> }>();
   for (const id of collectReferenceIds(type, document)) {
-    const found = await getDocument(projectId, dataset, id, perspective, false);
+    // With the read, so a referenced document is answered in the same language as
+    // the one that named it — an author's bio in French on a French post. The
+    // document itself arrives already resolved: see `answeredInLanguage`.
+    const found = await getDocument(projectId, dataset, id, perspective, false, read);
     if (!found) continue;
     const entityType = documentType(schema, typeof found._type === 'string' ? found._type : '');
     if (entityType) entities.set(id, { type: entityType, document: found });
@@ -362,6 +395,11 @@ function walkDeclaredFields(
  * read goes through — a read by id, a `->` dereference inside a query, and the
  * payload a webhook delivers — so all three carry the same address and none of
  * them needs a second request to draw a picture.
+ *
+ * `read` is how a language gets in, and this is one of the two places that applies
+ * one. It is resolved **before** the assets, so a localized image is an image by
+ * the time a URL is looked for — and the stored shape, which is given no `read` at
+ * all, keeps its maps and takes the value-driven asset pass that understands them.
  */
 export async function getDocument(
   projectId: string,
@@ -369,6 +407,7 @@ export async function getDocument(
   id: string,
   perspective: Perspective,
   editable: boolean,
+  read?: ReadLanguages,
 ): Promise<AcharDocument | undefined> {
   const resolved = resolveRows(await readRows(projectId, dataset, id), perspective);
   if (!resolved) return undefined;
@@ -378,7 +417,102 @@ export async function getDocument(
     published: resolved.published,
     editable,
   });
-  return withAssetUrls(projectId, dataset, document);
+
+  return withAssetUrls(
+    projectId,
+    dataset,
+    read ? answeredInLanguage(read.schema, document, read) : document,
+  );
+}
+
+/**
+ * How a read answers a language.
+ *
+ * Passed rather than looked up, because a read already has the two things this
+ * needs and neither of them is cheap a second time: the schema that says which
+ * fields hold one value per language, and the language the caller asked for. A
+ * read that is given none of this answers the stored row — which is exactly what
+ * `shape=stored` and an export want.
+ */
+export interface ReadLanguages {
+  schema: DatasetSchema;
+  /** The language to answer in, as the dataset spells it. */
+  language: string;
+  /** What a field with no value in `language` falls back to. */
+  defaultLanguage: string;
+}
+
+/**
+ * How one request reads a language, from the dataset row and the query string.
+ *
+ * One function rather than three lines in five handlers, because the answer has to
+ * be the same in all of them: the language the dataset spells, the default it falls
+ * back to, and the schema that knows which fields hold more than one value. A route
+ * that forgot the third would answer a localized field as a map without ever
+ * saying so.
+ */
+export function readLanguages(
+  schema: DatasetSchema,
+  dataset: { datasetName: string; languages?: unknown; defaultLanguage?: unknown },
+  requested: string | undefined,
+): ReadLanguages {
+  const languages = languagesOf(dataset);
+  return {
+    schema,
+    language: readLanguage(requested, { datasetName: dataset.datasetName, ...languages }),
+    defaultLanguage: languages.defaultLanguage,
+  };
+}
+
+/**
+ * A document with every localized field answered in one language.
+ *
+ * The one place a language is applied to a document, and the reason it is here
+ * rather than in a handler: a query, a read by id and a `->` dereference inside a
+ * query all end up in this file, and a read that resolved in one of them and not
+ * the others would be an API whose answers depended on which route asked.
+ *
+ * Resolution is **not** idempotent — a value that has already been resolved looks
+ * exactly like a value that was never localized, and marking it untranslated a
+ * second time would report a translation that is there. So a document is resolved
+ * when it is read out of the table and never again: `resolveLanguages` is called
+ * from `getDocument` and `resolvePage`, and the callers that already hold a
+ * resolved document hand it on rather than resolving it afresh.
+ */
+function answeredInLanguage(
+  schema: DatasetSchema,
+  document: AcharDocument,
+  read: ReadLanguages,
+): AcharDocument {
+  const type = documentType(schema, typeof document._type === 'string' ? document._type : '');
+  // A type this dataset does not declare has no field marked localized, so there
+  // is nothing to resolve and nothing to report.
+  if (!type) return document;
+
+  const { document: resolved, untranslated } = resolveLanguages(type, document, {
+    language: read.language,
+    defaultLanguage: read.defaultLanguage,
+  });
+
+  return {
+    ...(resolved as AcharDocument),
+    _language: read.language,
+    // Absent rather than empty: a complete answer is the ordinary one, and an
+    // empty array in every payload would make "nothing was translated" and "this
+    // read does not answer languages" look the same.
+    ...(untranslated.length > 0 ? { _untranslated: untranslated } : {}),
+  };
+}
+
+/**
+ * One document answered in a language, for a caller that already holds it.
+ *
+ * The same thing `toApiDocument` does with a `read`, for the two routes that get
+ * their document from somewhere else: a version out of the history table, which is
+ * a document nobody read out of a row in this request.
+ */
+export function inLanguage(document: AcharDocument, read: ReadLanguages): AcharDocument {
+  return answeredInLanguage(read.schema, document, read);
 }
 
 /** Whether a caller of this role may change a document, which is what `_editable` says. */
@@ -490,22 +624,24 @@ export async function resolvePageRows(
   return resolved;
 }
 
-/** The same page as API documents. */
+/** The same page as API documents, answered in a language when a read asks for one. */
 export async function resolvePage(
   projectId: string,
   dataset: string,
   rows: DocumentRow[],
   perspective: Perspective,
   editable: boolean,
+  read?: ReadLanguages,
 ): Promise<AcharDocument[]> {
   const resolved = await resolvePageRows(projectId, dataset, rows, perspective);
-  return resolved.map((entry) =>
-    toApiDocument(entry.row, {
+  return resolved.map((entry) => {
+    const document = toApiDocument(entry.row, {
       draft: entry.draft,
       published: entry.published,
       editable,
-    }),
-  );
+    });
+    return read ? answeredInLanguage(read.schema, document, read) : document;
+  });
 }
 
 /**
@@ -515,33 +651,35 @@ export async function resolvePage(
  * is the one place a type says which of its fields name it in a list — so the
  * caller passes the shaping function in rather than a field name this file would
  * have to guess at.
+ *
+ * The document it is given has already been through `answeredInLanguage`, which is
+ * why the preview reads one string rather than a map, and why the two language
+ * fields on the summary are read off it: a list says which language it is showing
+ * and marks the rows that are not really in it.
  */
 export function toSummary(
-  row: DocumentRow,
-  flags: { hasDraft: boolean; published: boolean },
+  document: AcharDocument,
+  flags: { hasDraft: boolean; published: boolean; language: string },
   preview: (document: AcharDocument) => {
     title: string;
     subtitle?: string | null;
     mediaUrl?: string | null;
   },
 ): DocumentSummary {
-  const document = toApiDocument(row, {
-    draft: row.draft,
-    published: flags.published,
-    editable: false,
-  });
   const shaped = preview(document);
   return {
-    _id: row._id,
-    _type: row._type,
-    _rev: row._rev,
-    _createdAt: row._createdAt,
-    _updatedAt: row._updatedAt,
+    _id: document._id,
+    _type: document._type,
+    _rev: document._rev,
+    _createdAt: document._createdAt,
+    _updatedAt: document._updatedAt,
     hasDraft: flags.hasDraft,
     published: flags.published,
     title: shaped.title,
     subtitle: shaped.subtitle ?? null,
     mediaUrl: shaped.mediaUrl ?? null,
+    language: flags.language,
+    untranslated: document._untranslated ?? [],
   };
 }
 
@@ -575,32 +713,50 @@ interface RowSeed {
 /**
  * The fields of a document being written whole, as they will be stored.
  *
- * One line, and it is a function because there are three callers — `create`,
- * `createOrReplace` and `createIfNotExists` — and a coercion applied at two of
- * three call sites is a rule that holds until somebody writes the mutation that
- * forgets it. `publish` and `restore` are not callers: both copy a row that has
- * already been through here, so running it again would be converting a value that
- * is already blocks.
+ * It is a function because there are three callers — `create`, `createOrReplace`
+ * and `createIfNotExists` — and a rule applied at two of three call sites is a rule
+ * that holds until somebody writes the mutation that forgets it. `publish` and
+ * `restore` are not callers: both copy a row that has already been through here, so
+ * running it again would be converting a value that is already blocks.
+ *
+ * **Two rules, in this order.** The language first, because a plain value has to
+ * become the map that holds it before anything walks the map; then the coercion,
+ * which is what turns a paragraph of text into blocks — per language, and with the
+ * language in the path so that two languages do not mint the same block keys.
+ *
+ * `_language` is destructured out rather than passed on: it is the write's own
+ * marker, not a field of the document, and a row holding it would be a document
+ * that always reads back as one somebody else translated.
  */
 function writeFields(
   context: MutationContext,
-  fields: Record<string, unknown>,
+  body: Record<string, unknown>,
 ): Record<string, unknown> {
-  return context.coerce ? context.coerce(fields) : fields;
+  const { _language: written, ...fields } = body;
+  const type = typeof fields._type === 'string' ? context.typeOf?.(fields._type) : undefined;
+  const language =
+    typeof written === 'string' && written
+      ? written
+      : (context.defaultLanguage ?? DEFAULT_LANGUAGE);
+
+  const attributed = type ? localizeFields(type, fields, language) : fields;
+  return context.coerce ? context.coerce(attributed) : attributed;
 }
 
 function buildRow(seed: RowSeed): DocumentRow {
-  // `_draft`, `_published` and `_editable` are what a *read* answers with rather
-  // than what a row holds, so a document that came out of a read carries them —
-  // and a restored version is exactly that, since a snapshot is the document as a
-  // client saw it. Passing them on would store a draft row claiming to be
-  // published, which nothing reads today and which nothing should have to know.
+  // Everything a *read* answers with rather than what a row holds, dropped here:
+  // a document that came out of a read carries these, and a restored version is
+  // exactly that, since a snapshot is the document as a client saw it. Passing them
+  // on would store a draft row claiming to be published and one claiming to be in
+  // a language, which nothing reads today and which nothing should have to know.
   const {
     _id: _ignoredId,
     _type: ignoredType,
     _draft: _ignoredDraft,
     _published: _ignoredPublished,
     _editable: _ignoredEditable,
+    _language: _ignoredLanguage,
+    _untranslated: _ignoredUntranslated,
     ...fields
   } = seed.fields;
   const type = typeof ignoredType === 'string' ? ignoredType : '';
@@ -644,6 +800,22 @@ export interface MutationContext {
    * invented: a `publishedBy` of `'unknown'` would be a name nothing can resolve.
    */
   publishedBy?: string | null;
+  /**
+   * The type a document is authored against, by name, when the dataset declares it.
+   *
+   * A lookup rather than one type, because one batch may touch several: what this
+   * answers is which of a document's fields hold one value per language, and that
+   * is the only thing a write needs to know about languages.
+   */
+  typeOf?: (name: string) => SchemaType | undefined;
+  /**
+   * The language a write with no `_language` of its own lands in.
+   *
+   * The dataset's default. A write that names none is a write from before the
+   * dataset had a second language, or from a client that does not care — and the
+   * default language is where a plain value belongs in both cases.
+   */
+  defaultLanguage?: string;
   /**
    * Runs over a document that is being written whole, with the stage it is being
    * written at. A patch is exempt — see `applyPatch` — because refusing an edit to
@@ -1068,6 +1240,22 @@ async function applyOne(
  * The trade is that two clients patching one document at the same moment resolve
  * last-write-wins rather than field-by-field, which is a conflict a client
  * notices by comparing `_rev`, and which a content editor hits about never.
+ *
+ * **A patch is where languages need a rule, because a patch names paths.** `set:
+ * { title: "Bonjour" }` in French is `title.fr`, not `title` — the field holds one
+ * value per language, and a caller writing one of them should not have to know that
+ * — so a plain value at a localized path gains the language as its last segment.
+ * Three deliberate exceptions:
+ *
+ * - A value that is already an object is the map, as sent, and stays at the field:
+ *   that is how a caller writes two languages in one element, and how a client that
+ *   read a `shape=stored` document writes it back.
+ * - `unset` paths are taken as written, so `title` removes the whole field and
+ *   `title.fr` removes one language. A marker that silently rewrote them would
+ *   leave no way to say the first of those.
+ * - A path the schema does not mark localized is left alone, whatever the patch
+ *   says about languages: the marker says which language a *plain value* is in, and
+ *   a field with one value has no language to be in.
  */
 function applyPatch(
   base: DocumentRow,
@@ -1085,21 +1273,53 @@ function applyPatch(
     _updatedAt: new Date().toISOString(),
   };
 
+  const typeName = typeof next._type === 'string' ? next._type : '';
+  const type = typeName ? context.typeOf?.(typeName) : undefined;
+  const defaultLanguage = context.defaultLanguage ?? DEFAULT_LANGUAGE;
+  const written = (patch._language ?? '').trim();
+  const language = written || defaultLanguage;
+
+  /**
+   * A value stored before its field was localized, moved into the default language.
+   *
+   * It has to happen before a language is written underneath it: `writePath`
+   * replaces a non-object on the way down, so patching `title.fr` of a document
+   * whose `title` is the plain string it was written as would drop that string —
+   * a translation costing the prose it was translated from.
+   */
+  const migrate = (path: string): void => {
+    if (!type || fieldByPath(type, path)?.localized !== true) return;
+    const current = readPath(next, path);
+    if (current === undefined || isLanguageMap(current)) return;
+    writePath(next, path, { [defaultLanguage]: current });
+  };
+
+  /** Where a plain value belongs: at the language, for a field that holds several. */
+  const target = (path: string, value: unknown): string => {
+    if (!type || fieldByPath(type, path)?.localized !== true) return path;
+    if (value !== undefined && isLanguageMap(value)) return path;
+    migrate(path);
+    return `${path}.${language}`;
+  };
+
   for (const [path, value] of Object.entries(patch.setIfMissing ?? {})) {
-    if (readPath(next, path) === undefined) writePath(next, path, value);
+    const at = target(path, value);
+    if (readPath(next, at) === undefined) writePath(next, at, value);
   }
   for (const [path, amount] of Object.entries(patch.inc ?? {})) {
-    const currentValue = readPath(next, path);
-    writePath(next, path, (typeof currentValue === 'number' ? currentValue : 0) + amount);
+    // A number is never a map, so `inc` always lands on one language — and it is
+    // the mutation that needs the rule most, because incrementing a map is NaN.
+    const at = target(path, amount);
+    const currentValue = readPath(next, at);
+    writePath(next, at, (typeof currentValue === 'number' ? currentValue : 0) + amount);
   }
   // Unsets run before sets, so a patch that clears a field and writes it in one
   // element lands on the written value rather than deleting it again.
   for (const path of patch.unset ?? []) writePath(next, path, undefined);
-  for (const [path, value] of Object.entries(patch.set ?? {})) writePath(next, path, value);
+  for (const [path, value] of Object.entries(patch.set ?? {})) writePath(next, target(path, value), value);
 
-  const type = typeof next._type === 'string' ? next._type : '';
-  if (!type) throw new HttpError(400, 'BAD_REQUEST', '_type is required', { field: '_type' });
-  next.typeKey = typeKeyOf(context.projectId, context.dataset, type);
+  if (!typeName) throw new HttpError(400, 'BAD_REQUEST', '_type is required', { field: '_type' });
+  next.typeKey = typeKeyOf(context.projectId, context.dataset, typeName);
 
   return next;
 }

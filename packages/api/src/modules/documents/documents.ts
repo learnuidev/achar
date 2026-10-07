@@ -35,6 +35,14 @@ export interface ListDocumentsOptions {
   search?: string;
   /** `field:asc` or `field:desc`. Any field except `_updatedAt` sorts in the page. */
   order?: string;
+  /**
+   * The language the previews are read in — one of the dataset's `languages`.
+   *
+   * Absent means the dataset's default. The summaries say which language they came
+   * back in and which of them fell back, so a list can mark a row that is not
+   * really in the language it is being read in.
+   */
+  language?: string;
 }
 
 export type DocumentShape = 'schema' | 'stored';
@@ -51,6 +59,15 @@ export interface GetDocumentOptions {
    * references rather than the documents they name.
    */
   shape?: DocumentShape;
+  /**
+   * The language to answer in, for a `schema` read.
+   *
+   * Every localized field comes back holding this language's value rather than the
+   * map, and `_untranslated` names the ones that had none and were answered from the
+   * default language. Ignored by `stored`, which answers every language at once —
+   * that being the reason an editor asks for it.
+   */
+  language?: string;
 }
 
 /**
@@ -71,6 +88,7 @@ export function query<T>(
     params: req.params ? JSON.stringify(req.params) : undefined,
     perspective: req.perspective,
     shape: req.shape,
+    language: req.language,
     limit: req.limit,
   });
   return api.get<QueryResult<T>>(`/v1/data/query/${projectId}/${dataset}${search}`);
@@ -90,6 +108,7 @@ export function listDocuments(
     perspective: options.perspective,
     search: options.search,
     order: options.order,
+    language: options.language,
   });
   return api.get<ListResponse<DocumentSummary>>(
     `/v1/data/list/${projectId}/${dataset}${search}`,
@@ -112,7 +131,11 @@ export function getDocument(
   perspective?: Perspective | GetDocumentOptions,
 ): Promise<AcharDocument> {
   const options = typeof perspective === 'string' ? { perspective } : perspective;
-  const search = queryString({ perspective: options?.perspective, shape: options?.shape });
+  const search = queryString({
+    perspective: options?.perspective,
+    shape: options?.shape,
+    language: options?.language,
+  });
   return api.get<AcharDocument>(
     `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}${search}`,
   );
@@ -187,9 +210,11 @@ export function getDocumentVersion(
   dataset: string,
   documentId: string,
   version: number,
+  options: { language?: string } = {},
 ): Promise<DocumentVersion> {
+  const search = queryString({ language: options.language });
   return api.get<DocumentVersion>(
-    `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}/versions/${version}`,
+    `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}/versions/${version}${search}`,
   );
 }
 

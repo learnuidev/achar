@@ -22,7 +22,15 @@ import type { DocumentSummary } from '@achar/types';
 import { requireDatasetAccess } from '../../lib/access';
 import { assetIdFromReference, assetUrlsForReferences } from '../../lib/assets';
 import { requireViewer } from '../../lib/auth';
-import { editableFor, pageRows, requirePerspective, resolvePageRows } from '../../lib/documents';
+import {
+  editableFor,
+  pageRows,
+  readLanguages,
+  requirePerspective,
+  resolvePageRows,
+  toApiDocument,
+  toSummary,
+} from '../../lib/documents';
 import {
   DEFAULT_LIMIT,
   MAX_LIMIT,
@@ -78,35 +86,52 @@ async function main(event: ApiEvent) {
   const schemaType = documentType(schema, type);
   const previewField = schemaType?.preview?.media;
 
+  /**
+   * Every row as a document in the language this list is being read in.
+   *
+   * Before anything previews it, because a preview reads *fields* and a localized
+   * field holds a map until a language is applied — the alternative is a list of
+   * titles that render as `[object Object]`. The media reference is read from the
+   * answered document for the same reason.
+   */
+  const read = readLanguages(schema, access.dataset, queryParam(event, 'language'));
+  const entries = resolved.map((entry) => ({
+    entry,
+    document: toApiDocument(
+      entry.row,
+      { draft: entry.draft, published: entry.published, editable },
+      read,
+    ),
+  }));
+
   // The media is a reference in the document and a URL in the answer, so the
   // page's references are resolved in one pass before any summary is shaped:
   // twenty posts illustrated with six images should cost six reads, not twenty.
-  const references = resolved
-    .map((entry) => (previewField ? readPath(entry.row, previewField) : undefined))
+  const references = entries
+    .map(({ document }) => (previewField ? readPath(document, previewField) : undefined))
     .map(assetIdFromReference)
     .filter((id): id is string => Boolean(id));
   const urls = await assetUrlsForReferences(projectId, dataset, references);
 
-  let summaries: DocumentSummary[] = resolved.map((entry) => {
-    const shaped = schemaType
-      ? previewOf(schemaType, entry.row)
-      : { title: entry.id, subtitle: undefined, mediaField: undefined };
-    const mediaReference = shaped.mediaField ? readPath(entry.row, shaped.mediaField) : undefined;
-    const assetId = assetIdFromReference(mediaReference);
+  let summaries: DocumentSummary[] = entries.map(({ entry, document }) =>
+    toSummary(
+      document,
+      { hasDraft: entry.hasDraft, published: entry.published, language: read.language },
+      (answered) => {
+        const shaped = schemaType
+          ? previewOf(schemaType, answered)
+          : { title: entry.id, subtitle: undefined, mediaField: undefined };
+        const mediaReference = shaped.mediaField ? readPath(answered, shaped.mediaField) : undefined;
+        const assetId = assetIdFromReference(mediaReference);
 
-    return {
-      _id: entry.row._id,
-      _type: entry.row._type,
-      _rev: entry.row._rev,
-      _createdAt: entry.row._createdAt,
-      _updatedAt: entry.row._updatedAt,
-      hasDraft: entry.hasDraft,
-      published: entry.published,
-      title: shaped.title,
-      subtitle: shaped.subtitle ?? null,
-      mediaUrl: (assetId ? urls.get(assetId) : undefined) ?? null,
-    };
-  });
+        return {
+          title: shaped.title,
+          subtitle: shaped.subtitle ?? null,
+          mediaUrl: (assetId ? urls.get(assetId) : undefined) ?? null,
+        };
+      },
+    ),
+  );
 
   if (search) {
     // Over the preview title, because that is the string the list draws and the

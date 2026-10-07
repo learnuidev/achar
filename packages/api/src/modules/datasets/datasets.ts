@@ -2,15 +2,27 @@ import type { Dataset, DatasetExport, DatasetVisibility } from '@achar/types';
 
 import type { ApiContext } from '../../lib/context';
 
-/** A new dataset inside a project. Private unless it says otherwise. */
+/** A new dataset inside a project. Private unless it says otherwise, and English. */
 export interface CreateDatasetBody {
   datasetName: string;
   visibility?: DatasetVisibility;
+  /** The languages to start with. Omitted means English alone. */
+  languages?: string[];
+  defaultLanguage?: string;
 }
 
-/** The one thing about a dataset that is editable after it exists. */
+/**
+ * What is editable about a dataset after it exists.
+ *
+ * A language is added here, and the list arrives whole: two clients each adding one
+ * would otherwise both be writing "the list, plus mine" and one of them would lose.
+ * Removing a language does not delete the content written in it — it stops being
+ * readable until the language comes back.
+ */
 export interface UpdateDatasetBody {
-  visibility: DatasetVisibility;
+  visibility?: DatasetVisibility;
+  languages?: string[];
+  defaultLanguage?: string;
 }
 
 export function listDatasets(api: ApiContext, projectId: string): Promise<Dataset[]> {

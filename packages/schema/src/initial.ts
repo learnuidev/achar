@@ -12,18 +12,38 @@ import type { SchemaField, SchemaType } from '@achar/types';
  * `_id` and `_rev` are deliberately not set: they belong to whatever writes the
  * document, and a client that invented one would be deciding an identity the API
  * is about to reissue.
+ *
+ * A **localized** field starts with the default language's empty value and nothing
+ * else — `{ en: '' }` rather than `{ en: '', fr: '' }`. The other languages are
+ * absent because absent is what "nobody has translated this yet" looks like, and a
+ * document that arrived with every language blank could not be told from one
+ * somebody had emptied on purpose.
  */
-export function initialDocument(type: SchemaType): Record<string, unknown> {
+export function initialDocument(
+  type: SchemaType,
+  options: { defaultLanguage?: string } = {},
+): Record<string, unknown> {
   const document: Record<string, unknown> = { _type: type.name };
   for (const field of type.fields) {
-    document[field.name] = initialValue(field);
+    document[field.name] = initialValue(field, options.defaultLanguage);
   }
   return document;
 }
 
-function initialValue(field: SchemaField): unknown {
-  if (field.initialValue !== undefined) return field.initialValue;
+function initialValue(field: SchemaField, defaultLanguage: string | undefined): unknown {
+  if (field.initialValue !== undefined) {
+    // An `initialValue` on a localized field is the value in the default language,
+    // for the same reason a plain value sent over the API is: nobody writes a
+    // translation into a schema as the thing every new document starts with.
+    return field.localized && defaultLanguage ? { [defaultLanguage]: field.initialValue } : field.initialValue;
+  }
 
+  const empty = emptyValue(field, defaultLanguage);
+  if (!field.localized) return empty;
+  return defaultLanguage ? { [defaultLanguage]: empty } : {};
+}
+
+function emptyValue(field: SchemaField, defaultLanguage: string | undefined): unknown {
   switch (field.type) {
     case 'string':
     case 'text':
@@ -41,7 +61,7 @@ function initialValue(field: SchemaField): unknown {
     case 'portableText':
       return [];
     case 'object':
-      return initialObject(field);
+      return initialObject(field, defaultLanguage);
     case 'image':
     case 'video':
     case 'file':
@@ -53,10 +73,10 @@ function initialValue(field: SchemaField): unknown {
   }
 }
 
-function initialObject(field: SchemaField): Record<string, unknown> {
+function initialObject(field: SchemaField, defaultLanguage: string | undefined): Record<string, unknown> {
   const object: Record<string, unknown> = {};
   for (const sub of field.fields ?? []) {
-    object[sub.name] = sub.initialValue !== undefined ? sub.initialValue : initialValue(sub);
+    object[sub.name] = initialValue(sub, defaultLanguage);
   }
   return object;
 }

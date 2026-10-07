@@ -108,29 +108,35 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
 - `defaultSchema(): DatasetSchema` — **the content model the public site is
   rendered from.** Every type listed below. The seed writes it, the studio edits
   it, `apps/app` renders it, and `apps/demo` queries it.
-- `validateDocument(type: SchemaType, value: unknown, options?: { requireComplete?: boolean }): SchemaIssue[]`
+- `validateDocument(type: SchemaType, value: unknown, options?: { requireComplete?: boolean; defaultLanguage?: string }): SchemaIssue[]`
   where `SchemaIssue = { path: string; message: string }`. `requireComplete` is
   the draft/publish line: a **draft** may be missing a required field — that is
   what a draft is for — while a **published** document may not. Shapes are checked
   either way, so a number where the schema says string is a mistake in a draft too.
-- `initialDocument(type: SchemaType): Record<string, unknown>` — a new document
-  with every `initialValue` applied and every required string an empty string.
+  `defaultLanguage` is the same line drawn across languages: a required field that is
+  `localized` has to be there in that one language and nowhere else. See *Languages*.
+- `initialDocument(type: SchemaType, options?: { defaultLanguage?: string }): Record<string, unknown>`
+  — a new document with every `initialValue` applied, every required string an empty
+  string, and every localized field a map holding the default language's empty value.
 - `coerceDocument(type: SchemaType, document): Record<string, unknown>` — a document
   as a caller sent it, read into the shape that gets stored. `blocksFromText(text,
   prefix)` is the whole rule: one paragraph block per line, blank lines dropped, keys
   scoped by the field's path so no two blocks in a document share one. The API runs
   it before validation, so that a rich-text field may arrive as a plain string
-  without `required` losing its meaning — see the route table's note.
+  without `required` losing its meaning — see the route table's note. A localized
+  field is converted language by language, with the language in the path.
 - `previewOf(type: SchemaType, document): { title: string; subtitle?: string; mediaField?: string }`
   — a type that names no `preview` is listed by its `title`, `name`, or first field
-  holding words, because a type written by hand arrives with no preview at all.
+  holding words, because a type written by hand arrives with no preview at all. It
+  reads a document that a language has already been applied to: see *Languages*.
 - `slugify(input: string): string`.
 - **TypeScript as a schema** (`src/ts/`), which is how a content type is authored:
   `parseTypeDeclaration(source)` reads a declaration — `type Post = { title: string;
-  cover: Image; tags: string[] }` — into fields and reports anything outside its
-  subset as an issue with a line and column; `printTypeDeclaration(type)` writes
-  fields back out, and the pair round-trip; `inferFields(sample)` reads a pasted
-  JSON document (or a list of them) into fields and says what it had to guess.
+  cover: Image; tags: string[]; excerpt: Localized<string> }` — into fields and
+  reports anything outside its subset as an issue with a line and column;
+  `printTypeDeclaration(type)` writes fields back out, and the pair round-trip;
+  `inferFields(sample)` reads a pasted JSON document (or a list of them) into fields
+  and says what it had to guess.
   The studio parses it and `POST /v1/schema/{p}/{d}/types` stores the result, so the
   TypeScript is a way of *writing* a schema rather than a second schema language the
   API would have to read: what is stored is the fields it produced.
@@ -152,6 +158,12 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
 | `integration` | document | `name`, `description`, `category`, `logo` (image), `order` |
 
 Each carries `preview` and `orderings` where they help a list.
+
+The fields marked **`localized`** in that model are the prose a translated page reads
+— `post.title`, `post.excerpt`, `post.body`, `page.title`, `faq.question` and so on —
+and deliberately not the rest: a slug per language is a routing decision rather than a
+translation, a number or a date reads the same everywhere, and a person's or a
+product's name is not the site's words to translate.
 
 ### `@achar/api`
 
@@ -212,6 +224,68 @@ The design system. Exports:
 
 Tailwind v4, CSS-variable tokens, light and dark. **No arbitrary values** like
 `text-[15px]` — if a size is not a token, it is not a size.
+
+## Languages
+
+**A dataset holds the language list** — `languages: string[]` and one
+`defaultLanguage` — because that is where the decision belongs: a site is translated
+into Spanish and a product's release notes are not, and a dataset is the boundary the
+API already resolves on every request. A dataset that has never been told is an
+English one, so a row written before this existed still reads.
+
+**A field marked `localized: true` holds one value per language**, stored on the
+document: `{ en: "Hello", fr: "Bonjour" }`. So a document is one row, with one id,
+one draft and one publish, whatever it has been translated into — the translation is
+a field on the document rather than a document beside it, and a French page that is
+half-finished is a document missing fields rather than a second document that has to
+be kept in step. `localized` is refused on an `object`: whether `{ en: …, fr: … }` is
+a map or the object's own fields is not a question any reader could answer, which is
+also what makes resolution decidable everywhere else.
+
+| Where | What |
+| --- | --- |
+| `PATCH /v1/projects/{p}/datasets/{d}` | `{ languages, defaultLanguage }`, written whole. Removing a language keeps the content written in it — unreadable until it comes back, which is the only safe way to say "not for now" |
+| `GET /v1/data/query\|list\|doc\|…/versions/…?language=fr` | The language to answer in. Not one the dataset has is a 400 listing the ones it does |
+| `AcharDocument._language` | The language the answer is in |
+| `AcharDocument._untranslated` | The localized fields with no value in it, by path, answered from the default language |
+| `create` / `createOrReplace` / `patch` `._language` | The language a plain value is written in. Absent means the default |
+| `QueryRequest.language`, `shape: 'stored'` | For a whole query; the stored shape is the one read that answers the maps rather than a language |
+
+Four rules make it work, and each of them is a decision rather than a detail:
+
+- **A read resolves before anything else uses it.** GROQ sees a document whose
+  localized fields hold this language's values, so `title` means the same thing in
+  every query anybody writes and no query needs a language argument of its own. The
+  resolution happens in `toApiDocument`/`resolvePage` and nowhere else, because it is
+  not idempotent: a value that has already been resolved looks exactly like one that
+  was never localized.
+- **A missing value falls back per field to the default language, and the answer says
+  so.** A site can be deployed in French on the day the French translation starts
+  rather than the day it finishes, and `_untranslated` is the half that keeps it
+  honest — a page can mark the gap, a build step can list it, and nobody has to diff
+  two documents to find it.
+- **A write says which language a plain value is in, and an object is the map.** A
+  caller writing `{ "set": { "title": "Bonjour" }, "_language": "fr" }` should not
+  have to know which fields are translatable; a client that read a `shape=stored`
+  document writes the map back as it found it. A patch's `unset` paths are taken as
+  written, so `title` removes the whole field and `title.fr` removes one language.
+- **`required` is required in the default language and nowhere else**, which is the
+  draft/publish line drawn across languages: a translation arrives after the document
+  does, so a French title still being written must not hold up publishing the English
+  one. Publishing is not blocked by a language that is not finished.
+
+The rules live in `@achar/schema`'s `languages.ts` — `isLanguageMap`,
+`languageValue`, `setLanguageValue`, `resolveLanguages`, `localizeFields` — so the
+API, the studio's editor and its preview read one definition: the studio's form holds
+the maps and edits one language at a time, the preview resolves the way a read does,
+and the API applies the same fallback a site would be served.
+
+**The two reads that answer every language at once are the export and a webhook.**
+An export carries the stored documents with `languages` and `defaultLanguage` beside
+them, and a webhook's payload is the row as it stands, maps and all: both are things
+a *machine* consumes, and a receiver that was handed one language would have no way to
+tell that a translation existed. A consumer that wants one language has the query API
+and `?language=` for that.
 
 ## The content API
 
@@ -277,7 +351,7 @@ the handler never sees an unauthenticated request at all.
 | GET | `/v1/projects/{p}/datasets` | members | The project's datasets |
 | POST | `/v1/projects/{p}/datasets` | editors | Make a dataset |
 | GET | `/v1/projects/{p}/datasets/{d}` | members | One dataset |
-| PATCH | `/v1/projects/{p}/datasets/{d}` | editors | Change its visibility |
+| PATCH | `/v1/projects/{p}/datasets/{d}` | editors | Change its visibility, its languages, or the default one |
 | DELETE | `/v1/projects/{p}/datasets/{d}` | admins | Delete it and everything in it |
 | GET | `/v1/projects/{p}/datasets/{d}/export` | members | The whole dataset, portable |
 | GET | `/v1/projects/{p}/datasets/{d}/schema` | members | The schema it is authored against |
@@ -290,9 +364,9 @@ the handler never sees an unauthenticated request at all.
 | PATCH | `/v1/projects/{p}/webhooks/{webhookId}` | editors | Change it, or take it out of service |
 | DELETE | `/v1/projects/{p}/webhooks/{webhookId}` | editors | Delete it |
 | GET | `/v1/projects/{p}/webhooks/{webhookId}/deliveries` | members | What it has been told, and what happened |
-| GET | `/v1/data/query/{p}/{d}` | readers | **GROQ.** `?query=&params=&perspective=` |
+| GET | `/v1/data/query/{p}/{d}` | readers | **GROQ.** `?query=&params=&perspective=&language=` |
 | GET | `/v1/data/list/{p}/{d}` | readers | Documents of one type, paged, for a studio's list |
-| GET | `/v1/data/doc/{p}/{d}/{docId}` | readers | One document, at one perspective |
+| GET | `/v1/data/doc/{p}/{d}/{docId}` | readers | One document, at one perspective, in one language |
 | POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`. `create` + `publish` in one batch is how content is added and made live in a single request |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions` | readers | Every time the document was published |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions/{version}` | readers | One version, as it was |

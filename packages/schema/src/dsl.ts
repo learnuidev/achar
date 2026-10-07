@@ -14,6 +14,7 @@ export function defineField(field: SchemaField): SchemaField {
     ...field,
     required: field.required ?? false,
     hidden: field.hidden ?? false,
+    localized: field.localized ?? false,
     ...(field.fields ? { fields: field.fields.map(defineField) } : {}),
     ...(field.of ? { of: field.of.map(defineField) } : {}),
   };

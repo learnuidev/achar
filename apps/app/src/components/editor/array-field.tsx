@@ -30,6 +30,8 @@ export function ArrayField({
   issues,
   projectId,
   dataset,
+  language,
+  defaultLanguage,
 }: FieldControlProps) {
   const items = Array.isArray(value) ? value : [];
   const itemField: SchemaField | undefined = field.of?.[0];
@@ -79,7 +81,7 @@ export function ArrayField({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onChange([...items, initialForField(itemField)])}
+            onClick={() => onChange([...items, initialForField(itemField, defaultLanguage)])}
           >
             <PlusIcon />
             Add
@@ -140,6 +142,8 @@ export function ArrayField({
                 issues={issues}
                 projectId={projectId}
                 dataset={dataset}
+                language={language}
+                defaultLanguage={defaultLanguage}
               />
             </div>
           ))}

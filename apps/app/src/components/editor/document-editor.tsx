@@ -4,15 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { SchemaType } from '@achar/types';
 import { Skeleton } from '@achar/ui';
-import { initialDocument, validateDocument } from '@achar/schema';
+import { initialDocument, isLanguageMap, languageValue, resolveLanguages, validateDocument } from '@achar/schema';
 import { useAcharClient } from '@/components/client-provider';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { DocumentForm } from '@/components/editor/document-form';
 import { DocumentPreview } from '@/components/editor/document-preview';
 import { InspectorPanel } from '@/components/editor/inspector-panel';
+import { LanguageSwitch } from '@/components/editor/language-switch';
 import { PublishBar, type SaveState } from '@/components/editor/publish-bar';
 import { DocumentHistoryDialog } from '@/components/studio/document-history-dialog';
+import { useStudio } from '@/components/studio/studio-context';
 import { useDocumentPair } from '@/hooks/use-documents';
 import { errorMessage } from '@/lib/errors';
 import { draftIdOf, routes } from '@/lib/routes';
@@ -63,8 +65,32 @@ export function DocumentEditor({
 }) {
   const client = useAcharClient();
   const pair = useDocumentPair(projectId, dataset, documentId, { skip: isNew });
+  const { datasetInfo } = useStudio();
 
-  const [value, setValue] = useState<Record<string, unknown>>(() => initialDocument(type));
+  /**
+   * The languages this document is authored in, and the one on screen.
+   *
+   * From the dataset, because that is where a language list lives — and a dataset
+   * the shell could not read is drawn as an English one rather than as nothing: the
+   * editor has to draw *something*, and one language shows a document where no
+   * language would show a form nobody could use.
+   *
+   * `chosen` is null until somebody switches, and the screen follows the dataset's
+   * default until then. That is what makes adding French to a dataset, or changing
+   * which language is the default, take effect in an editor that was already open.
+   */
+  const languages = useMemo(
+    () =>
+      datasetInfo?.languages?.length ? datasetInfo.languages : [datasetInfo?.defaultLanguage ?? 'en'],
+    [datasetInfo],
+  );
+  const defaultLanguage = datasetInfo?.defaultLanguage ?? languages[0]!;
+  const [chosen, setChosen] = useState<string | null>(null);
+  const language = chosen && languages.includes(chosen) ? chosen : defaultLanguage;
+
+  const [value, setValue] = useState<Record<string, unknown>>(() =>
+    initialDocument(type, { defaultLanguage }),
+  );
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('clean');
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -87,8 +113,31 @@ export function DocumentEditor({
   // written, which is what `dirty` covers.
   const draftDiffers = hasDraft || dirty;
 
-  const issues = useMemo(() => validateDocument(type, value), [type, value]);
-  const title = useMemo(() => previewTitle(type, value), [type, value]);
+  const issues = useMemo(
+    () => validateDocument(type, value, { defaultLanguage }),
+    [type, value, defaultLanguage],
+  );
+  const title = useMemo(
+    () => previewTitle(type, value, { language, defaultLanguage }),
+    [type, value, language, defaultLanguage],
+  );
+
+  /**
+   * How much of this document each language is missing.
+   *
+   * The same walk the API runs when it answers a read, asked once per language
+   * instead of once for the one being read — so the number the switch shows and the
+   * fallback a reader gets are one fact read twice, rather than two counters that
+   * agree until somebody edits a schema.
+   */
+  const missing = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const code of languages) {
+      counts[code] = resolveLanguages(type, value, { language: code, defaultLanguage }).untranslated
+        .length;
+    }
+    return counts;
+  }, [languages, type, value, defaultLanguage]);
 
   // The form is filled from the read, but never while somebody is typing: a
   // refetch that landed mid-sentence and reset the fields to the last saved
@@ -96,10 +145,10 @@ export function DocumentEditor({
   useEffect(() => {
     if (dirty) return;
     const clean = shown ?? published;
-    const next = clean ? contentOf(clean) : initialDocument(type);
-    setValue({ ...initialDocument(type), ...next });
+    const next = clean ? contentOf(clean) : initialDocument(type, { defaultLanguage });
+    setValue({ ...initialDocument(type, { defaultLanguage }), ...next });
     setSaveState('clean');
-  }, [shown, published, type, dirty]);
+  }, [shown, published, type, dirty, defaultLanguage]);
 
   const saveDraft = useCallback(async (): Promise<boolean> => {
     if (!canEdit) return false;
@@ -283,6 +332,15 @@ export function DocumentEditor({
           canEdit={canEdit}
           busy={busy}
           previewOpen={previewOpen}
+          languageSwitch={
+            <LanguageSwitch
+              languages={languages}
+              defaultLanguage={defaultLanguage}
+              value={language}
+              missing={missing}
+              onChange={setChosen}
+            />
+          }
           history={
             // Restoring writes the draft, so the editor drops whatever it was
             // holding and reads the restored row: the refill effect only runs for
@@ -333,6 +391,8 @@ export function DocumentEditor({
               projectId={projectId}
               dataset={dataset}
               focusPath={focusPath}
+              language={language}
+              defaultLanguage={defaultLanguage}
             />
           )}
         </div>
@@ -343,7 +403,12 @@ export function DocumentEditor({
           <p className="mb-4 text-xs uppercase tracking-wide text-muted-foreground">
             As a reader sees it
           </p>
-          <DocumentPreview type={type} value={value} />
+          <DocumentPreview
+            type={type}
+            value={value}
+            language={language}
+            defaultLanguage={defaultLanguage}
+          />
         </aside>
       )}
 
@@ -416,14 +481,32 @@ function contentOf(document: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-/** What the bar calls the document — the schema's own preview title, or the id. */
-function previewTitle(type: SchemaType, value: Record<string, unknown>): string {
+/**
+ * What the bar calls the document — the schema's own preview title, or the id.
+ *
+ * Read in the language on screen: a translated title is a map of languages, and a
+ * bar that asked a map for a string would call every translated document
+ * "Untitled" — a worse answer than the id it already falls back to. An object where
+ * a title belongs is a map, which is the one thing this needs to know and the
+ * schema's job to be sure of.
+ */
+function previewTitle(
+  type: SchemaType,
+  value: Record<string, unknown>,
+  languages: { language: string; defaultLanguage: string },
+): string {
+  const read = (path: string): unknown => {
+    const found = value[path];
+    if (!isLanguageMap(found)) return found;
+    return languageValue(found, languages.language, languages.defaultLanguage).value;
+  };
+
   const preview = type.preview;
   if (preview?.title) {
-    const found = value[preview.title];
+    const found = read(preview.title);
     if (typeof found === 'string' && found.trim()) return found;
   }
-  const title = value.title;
+  const title = read('title');
   if (typeof title === 'string' && title.trim()) return title;
   const id = value._id;
   if (typeof id === 'string' && id) return id;

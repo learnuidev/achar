@@ -14,6 +14,15 @@ import { hashRevision } from './hash';
  *
  * The types are ordered the way the studio should list them — the singleton
  * first, then the two that are referenced by everything else, then the rest.
+ *
+ * **The fields marked `localized` are the prose a translated page reads.** Not
+ * slugs, because a URL per language is a routing decision rather than a
+ * translation; not numbers, booleans, dates, references or asset ids, which read
+ * the same in every language; and not a person's name or a product's, which are
+ * not the site's words to translate. Everything else a reader sees is prose, and
+ * prose is what a translator is for — so `post.body` and `faq.answer` hold one
+ * value per language, and a site that reads in French serves French or says it
+ * could not.
  */
 export function defaultSchema(): DatasetSchema {
   const types = contentModel().map(defineType);
@@ -57,6 +66,7 @@ function contentModel(): SchemaType[] {
           type: 'string',
           group: 'general',
           placeholder: 'The content operating system',
+          localized: true,
         }),
         defineField({
           name: 'description',
@@ -65,6 +75,7 @@ function contentModel(): SchemaType[] {
           rows: 3,
           group: 'general',
           description: 'What the site says about itself, for search results and social cards.',
+          localized: true,
         }),
         defineField({
           name: 'announcement',
@@ -72,6 +83,7 @@ function contentModel(): SchemaType[] {
           type: 'string',
           group: 'general',
           description: 'A single line above the fold. Empty means there is nothing to announce.',
+          localized: true,
         }),
         defineField({
           name: 'primaryCta',
@@ -112,7 +124,7 @@ function contentModel(): SchemaType[] {
           placeholder: 'Head of content operations',
         }),
         defineField({ name: 'avatar', title: 'Avatar', type: 'image' }),
-        defineField({ name: 'bio', title: 'Bio', type: 'text', rows: 4 }),
+        defineField({ name: 'bio', title: 'Bio', type: 'text', rows: 4, localized: true }),
         defineField({
           name: 'links',
           title: 'Links',
@@ -143,7 +155,7 @@ function contentModel(): SchemaType[] {
       icon: 'Layers',
       description: 'A topic posts are filed under.',
       fields: [
-        defineField({ name: 'title', title: 'Title', type: 'string', required: true }),
+        defineField({ name: 'title', title: 'Title', type: 'string', required: true, localized: true }),
         defineField({
           name: 'slug',
           title: 'Slug',
@@ -151,7 +163,7 @@ function contentModel(): SchemaType[] {
           required: true,
           description: 'The URL segment — /blog/category/<slug>.',
         }),
-        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3 }),
+        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3, localized: true }),
       ],
       preview: { title: 'title', subtitle: 'description' },
       orderings: [
@@ -170,7 +182,14 @@ function contentModel(): SchemaType[] {
         { name: 'meta', title: 'Metadata' },
       ],
       fields: [
-        defineField({ name: 'title', title: 'Title', type: 'string', required: true, group: 'content' }),
+        defineField({
+          name: 'title',
+          title: 'Title',
+          type: 'string',
+          required: true,
+          group: 'content',
+          localized: true,
+        }),
         defineField({
           name: 'slug',
           title: 'Slug',
@@ -187,6 +206,7 @@ function contentModel(): SchemaType[] {
           required: true,
           group: 'content',
           description: 'Two sentences, used in lists and cards as written.',
+          localized: true,
         }),
         defineField({
           name: 'coverImage',
@@ -201,6 +221,7 @@ function contentModel(): SchemaType[] {
           rows: 24,
           required: true,
           group: 'content',
+          localized: true,
         }),
         defineField({
           name: 'publishedAt',
@@ -258,9 +279,9 @@ function contentModel(): SchemaType[] {
       icon: 'Newspaper',
       description: 'A standing page — /docs, /about — authored like a post.',
       fields: [
-        defineField({ name: 'title', title: 'Title', type: 'string', required: true }),
+        defineField({ name: 'title', title: 'Title', type: 'string', required: true, localized: true }),
         defineField({ name: 'slug', title: 'Slug', type: 'slug', required: true }),
-        defineField({ name: 'body', title: 'Body', type: 'portableText', rows: 24 }),
+        defineField({ name: 'body', title: 'Body', type: 'portableText', rows: 24, localized: true }),
       ],
       preview: { title: 'title', subtitle: 'slug' },
     }),
@@ -275,7 +296,7 @@ function contentModel(): SchemaType[] {
         defineField({ name: 'name', title: 'Name', type: 'string', required: true }),
         defineField({ name: 'logo', title: 'Logo', type: 'image' }),
         defineField({ name: 'industry', title: 'Industry', type: 'string' }),
-        defineField({ name: 'quote', title: 'Quote', type: 'text', rows: 3 }),
+        defineField({ name: 'quote', title: 'Quote', type: 'text', rows: 3, localized: true }),
         defineField({
           name: 'quoteAuthor',
           title: 'Quote author',
@@ -319,8 +340,15 @@ function contentModel(): SchemaType[] {
       icon: 'Sparkles',
       description: 'One card in the product grid.',
       fields: [
-        defineField({ name: 'title', title: 'Title', type: 'string', required: true }),
-        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3, required: true }),
+        defineField({ name: 'title', title: 'Title', type: 'string', required: true, localized: true }),
+        defineField({
+          name: 'description',
+          title: 'Description',
+          type: 'text',
+          rows: 3,
+          required: true,
+          localized: true,
+        }),
         defineField({
           name: 'icon',
           title: 'Icon',
@@ -355,7 +383,7 @@ function contentModel(): SchemaType[] {
       icon: 'Tag',
       description: 'One column of the pricing table.',
       fields: [
-        defineField({ name: 'name', title: 'Name', type: 'string', required: true }),
+        defineField({ name: 'name', title: 'Name', type: 'string', required: true, localized: true }),
         defineField({
           name: 'price',
           title: 'Price',
@@ -369,13 +397,15 @@ function contentModel(): SchemaType[] {
           title: 'Period',
           type: 'string',
           placeholder: 'per editor / month',
+          localized: true,
         }),
-        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3 }),
+        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3, localized: true }),
         defineField({
           name: 'features',
           title: 'Features',
           type: 'array',
           of: [defineField({ name: 'feature', title: 'Feature', type: 'string' })],
+          localized: true,
         }),
         defineField({ name: 'ctaLabel', title: 'Call to action', type: 'string', required: true }),
         defineField({ name: 'ctaHref', title: 'Call to action href', type: 'string', required: true }),
@@ -400,8 +430,8 @@ function contentModel(): SchemaType[] {
       kind: 'document',
       icon: 'CircleHelp',
       fields: [
-        defineField({ name: 'question', title: 'Question', type: 'string', required: true }),
-        defineField({ name: 'answer', title: 'Answer', type: 'text', rows: 4, required: true }),
+        defineField({ name: 'question', title: 'Question', type: 'string', required: true, localized: true }),
+        defineField({ name: 'answer', title: 'Answer', type: 'text', rows: 4, required: true, localized: true }),
         defineField({ name: 'order', title: 'Order', type: 'number', initialValue: 0 }),
       ],
       preview: { title: 'question', subtitle: 'answer' },
@@ -415,7 +445,7 @@ function contentModel(): SchemaType[] {
       icon: 'Plug',
       fields: [
         defineField({ name: 'name', title: 'Name', type: 'string', required: true }),
-        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3 }),
+        defineField({ name: 'description', title: 'Description', type: 'text', rows: 3, localized: true }),
         defineField({
           name: 'category',
           title: 'Category',

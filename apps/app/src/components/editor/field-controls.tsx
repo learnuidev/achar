@@ -4,8 +4,9 @@ import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectV
 import { SparklesIcon } from 'lucide-react';
 import type { PortableText, SchemaField } from '@achar/types';
 import type { SchemaIssue } from '@achar/schema';
-import { slugify } from '@achar/schema';
+import { isLanguageMap, languageValue, setLanguageValue, slugify } from '@achar/schema';
 import { hasIssueAt } from '@/lib/schema';
+import { languageName } from '@/lib/language';
 import { toDateInput, toDateTimeLocal } from '@/lib/format';
 import { AssetField } from '@/components/editor/asset-field';
 import { ArrayField } from '@/components/editor/array-field';
@@ -26,6 +27,13 @@ import { PortableTextEditor } from '@/components/editor/portable-text-editor';
  *
  * Nothing here validates. Issues arrive from `validateDocument` and are marked,
  * not enforced: a draft is a place for a half-written document.
+ *
+ * **A localized field is the same control, one language at a time.** The editor is
+ * on one language, and `FieldControl` hands the control that language's value and
+ * writes the answer back into the map — so every control in this file stays a
+ * control for *one* value and none of them has to know that languages exist. The
+ * alternative, a control per language inside every field, is a form nobody can read
+ * at two languages and nobody can use at six.
  */
 export interface FieldControlProps {
   field: SchemaField;
@@ -43,9 +51,70 @@ export interface FieldControlProps {
   issues: SchemaIssue[];
   projectId: string;
   dataset: string;
+  /** The language the editor is on. Only a localized field ever reads it. */
+  language: string;
+  /** The dataset's default language: whose value a reader is shown for a gap. */
+  defaultLanguage: string;
 }
 
 export function FieldControl(props: FieldControlProps) {
+  if (props.field.localized) return <LocalizedControl {...props} />;
+  return <FieldControlBody {...props} />;
+}
+
+/**
+ * A field that holds one value per language, in the language the editor is on.
+ *
+ * **Empty means untranslated, and the hint says what that costs.** An editor who
+ * typed nothing in French sees a reader still gets English — the API falls back to
+ * the default language and reports it — and a box that looked the same whether the
+ * site had a translation or not is how a site ships with three English sentences in
+ * the middle of a French page.
+ *
+ * A value written before the field was localized is the default language's, which
+ * is the same rule the API applies, so opening an old document and typing in French
+ * leaves the prose it already had exactly where a reader has been finding it.
+ */
+function LocalizedControl({
+  field,
+  value,
+  onChange,
+  language,
+  defaultLanguage,
+  ...rest
+}: FieldControlProps) {
+  const own = isLanguageMap(value)
+    ? value[language]
+    : language === defaultLanguage
+      ? value
+      : undefined;
+  const fallback = languageValue(value, defaultLanguage, defaultLanguage).value;
+  const missing = own === undefined || own === null;
+  const borrows =
+    missing && language !== defaultLanguage && fallback !== undefined && fallback !== null;
+
+  return (
+    <div className="grid gap-1">
+      <FieldControlBody
+        {...rest}
+        field={{ ...field, localized: false }}
+        value={own}
+        onChange={(next) => onChange(setLanguageValue(value, language, next, defaultLanguage))}
+        language={language}
+        defaultLanguage={defaultLanguage}
+      />
+
+      {borrows ? (
+        <p className="px-1 text-xs text-muted-foreground">
+          Not written in {languageName(language)} yet, so a reader is shown the{' '}
+          {languageName(defaultLanguage)} one.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function FieldControlBody(props: FieldControlProps) {
   const { field, readOnly } = props;
   const invalid = hasIssueAt(props.issues, props.path);
 
@@ -344,6 +413,8 @@ function ObjectControl({
   issues,
   projectId,
   dataset,
+  language,
+  defaultLanguage,
 }: FieldControlProps) {
   const nested = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const fields = (field.fields ?? []).filter((candidate) => !candidate.hidden);
@@ -370,6 +441,8 @@ function ObjectControl({
           issues={issues}
           projectId={projectId}
           dataset={dataset}
+          language={language}
+          defaultLanguage={defaultLanguage}
         />
       ))}
     </div>

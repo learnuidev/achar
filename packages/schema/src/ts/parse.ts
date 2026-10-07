@@ -41,6 +41,7 @@ import { defineField } from '../dsl';
  * | `Slug`, `Url`, `Email` | a string that is checked |
  * | `Image`, `Video`, `File` | an asset |
  * | `PortableText` | rich text |
+ * | `Localized<X>` | one `X` per language |
  * | `'a' \| 'b'` | one of those, as a picker |
  * | `{ … }` | a nested object |
  * | `SomeType` | a reference to a document of that type |
@@ -296,6 +297,7 @@ type Shape =
   | { kind: 'object'; fields: SchemaField[] }
   | { kind: 'array'; of: SchemaField[] }
   | { kind: 'options'; options: { title: string; value: string }[] }
+  | { kind: 'localized'; of: Shape }
   | { kind: 'unknown'; because: string };
 
 /** A comment read as words: the first line is a title, the rest is prose. */
@@ -547,6 +549,30 @@ class Parser {
       });
     }
 
+    // `Localized<X>` — one value per language. The second generic this parser
+    // knows by name, and for the same reason as the first: a language is not a
+    // shape of value, it is how many of them there are, so `Localized<string>` and
+    // `string` hold the same kind of thing.
+    if (written.toLowerCase() === 'localized') {
+      const args = this.typeArguments();
+      const inner = args[0] ?? typed({ kind: 'unknown', because: 'nothing' });
+
+      if (inner.shape.kind === 'object') {
+        // A whole object cannot hold one value per language — `{ en: …, fr: … }` is
+        // then indistinguishable from the object's own fields, which is why the
+        // API refuses the combination. Said here, where the caret can point at it.
+        this.issues.push(
+          at(
+            this.source,
+            token.offset,
+            'Achar cannot localize a whole object — write `Localized<…>` on each of its fields',
+          ),
+        );
+      }
+
+      return typed({ kind: 'localized', of: inner.shape });
+    }
+
     if (this.peek().text === '<') {
       this.typeArguments();
       this.issues.push(at(this.source, token.offset, `Achar cannot read \`${written}<…>\` as a field`));
@@ -668,6 +694,10 @@ class Parser {
         return defineField({ ...base, type: 'array', of: shape.of });
       case 'options':
         return defineField({ ...base, type: 'string', options: shape.options });
+      case 'localized':
+        // The inner shape decides the field, and the wrapper only adds the one
+        // thing it means: this field holds one of those per language.
+        return { ...this.fieldFromShape(written, shape.of, doc, optional), localized: true };
       case 'unknown':
         // Only reached for an array item that could not be read; the field that
         // held it is already an issue and this keeps the list non-empty.
