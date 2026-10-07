@@ -217,7 +217,7 @@ export function SettingsForm({
       <Card>
         <CardHeading
           title="Mail and origins"
-          hint="The sender invitations come from, and the three app base URLs baked into every handler's environment."
+          hint="The sender invitations would come from, and the three app base URLs — which are the origins a browser may call this deployment's API and asset bucket from. A domain your app is served on belongs here, or in the callback URLs above."
         />
 
         <div className="mt-5 grid gap-5 sm:grid-cols-2">

@@ -207,23 +207,23 @@ export async function backendEnv(
     {
       key: "Public site base URL",
       value: settings?.mail.appBaseUrl || null,
-      source: "Settings — APP_BASE_URL, the public site in a mailed link",
+      source: "Settings — the origin the public site is served from",
       editable: true,
-      usedBy: ["invitations", "app"],
+      usedBy: ["API CORS", "asset uploads"],
     },
     {
       key: "Studio base URL",
       value: settings?.mail.studioBaseUrl || null,
-      source: "Settings — STUDIO_BASE_URL, where an author is sent — the same app, at /studio",
+      source: "Settings — where the studio is served, the same app at /studio",
       editable: true,
-      usedBy: ["invitations", "app"],
+      usedBy: ["API CORS", "asset uploads"],
     },
     {
       key: "Console base URL",
       value: settings?.mail.consoleBaseUrl || null,
-      source: "Settings — CONSOLE_BASE_URL, where an operator is sent",
+      source: "Settings — the origin the console is served from",
       editable: true,
-      usedBy: ["console"],
+      usedBy: ["API CORS", "asset uploads"],
     },
   ];
 

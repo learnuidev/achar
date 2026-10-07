@@ -13,6 +13,7 @@ import type { Construct } from 'constructs';
 
 import { bundle } from '../bundling.ts';
 import type { AcharConfig } from '../config.ts';
+import { appOrigins } from '../config.ts';
 import { FUNCTIONS, SERVICE_DEFAULTS, SERVICE_VERSION, TABLES } from '../generated/service.ts';
 import { functionName as lambdaName, pascal, routePath } from '../naming.ts';
 import type { HttpRouteSpec } from '../types.ts';
@@ -115,6 +116,10 @@ export class AcharApiStack extends Stack {
       apiName: `achar-${config.stage}`,
       description: 'The Achar content API',
       corsPreflight: {
+        // The same list the asset bucket allows, from one place — see `appOrigins`,
+        // and note that a domain missing here is a CORS error on every call a
+        // browser makes, because an HTTP API applies this to preflights only and the
+        // handlers answer `*` on the request itself.
         allowOrigins: appOrigins(config),
         allowMethods: [
           apigwv2.CorsHttpMethod.GET,
@@ -239,29 +244,3 @@ function isAuthorized(route: HttpRouteSpec): boolean {
   return route.authorized !== false;
 }
 
-/**
- * The origins a browser may call this API from.
- *
- * Read from the config's own app URLs rather than hard-coded, because a stage
- * whose site lives somewhere else has a stage-specific CORS problem, and the local
- * ports are included unconditionally: every one of the three apps runs on
- * `localhost` before it runs anywhere else, and an API that cannot be called by the
- * studio on the machine the studio is being written on is an API nobody can
- * develop against.
- */
-function appOrigins(config: AcharConfig): string[] {
-  const origins = new Set([
-    config.mail.appBaseUrl,
-    config.mail.studioBaseUrl,
-    config.mail.consoleBaseUrl,
-    // The four local ports that exist: the app, the console, the demo — and no
-    // 3001, because the studio is served from the app at `/studio` rather than
-    // from a process of its own. An origin in an allow-list that nothing can be
-    // served from is the kind of entry that looks like it is doing something.
-    'http://localhost:3000',
-    'http://localhost:3002',
-    'http://localhost:3003',
-  ]);
-
-  return [...origins].filter(Boolean);
-}

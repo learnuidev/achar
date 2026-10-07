@@ -6,7 +6,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
 
 import type { AcharConfig } from '../config.ts';
-import { importedResources, ownershipOf } from '../config.ts';
+import { appOrigins, importedResources, ownershipOf } from '../config.ts';
 
 export interface AcharMediaStackProps extends StackProps {
   config: AcharConfig;
@@ -186,27 +186,18 @@ export class AcharMediaStack extends Stack {
 /**
  * The CORS rule the studio's uploader needs.
  *
- * An upload is a browser PUT straight to S3 with a presigned URL — the bytes
- * never pass through a Lambda — so the bucket has to allow the origins the studio
- * runs on. `ETag` is exposed because a multipart upload needs it back, and a
- * presigned single PUT is easier to debug when the response is readable at all.
+ * An upload is a browser PUT straight to S3 with a presigned URL — the bytes never
+ * pass through a Lambda — so the bucket has to allow the origins the studio runs on.
+ * `ETag` is exposed because a multipart upload needs it back, and a presigned single
+ * PUT is easier to debug when the response is readable at all.
+ *
+ * The origins are `appOrigins` rather than a list of their own: the API and the
+ * bucket are called from the same pages, so two lists were two chances for a domain
+ * to work in one half of an upload and fail in the other.
  */
 function corsRule(config: AcharConfig): s3.CorsRule {
-  const origins = new Set([
-    config.mail.appBaseUrl,
-    config.mail.studioBaseUrl,
-    config.mail.consoleBaseUrl,
-    // The four local ports that exist: the app, the console, the demo — and no
-    // 3001, because the studio is served from the app at `/studio` rather than
-    // from a process of its own. An origin in an allow-list that nothing can be
-    // served from is the kind of entry that looks like it is doing something.
-    'http://localhost:3000',
-    'http://localhost:3002',
-    'http://localhost:3003',
-  ]);
-
   return {
-    allowedOrigins: [...origins].filter(Boolean),
+    allowedOrigins: appOrigins(config),
     allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.HEAD, s3.HttpMethods.PUT],
     allowedHeaders: ['*'],
     exposedHeaders: ['ETag', 'x-amz-version-id'],

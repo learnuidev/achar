@@ -157,18 +157,23 @@ export function configPath(stage: string): string {
   return path.join(CONFIG_DIR, `achar-${stage}.json`);
 }
 
-/** The ports the apps run on, which is what a default has to agree with. */
-const APP_PORTS = { app: 3000, console: 3002 } as const;
+/**
+ * The ports the apps run on, which is what a default has to agree with.
+ *
+ * `demo` is here although nothing defaults from it, because the CORS allow-lists
+ * do: a stage's apps are three, and a port written down in one place is a port that
+ * cannot be forgotten in the other.
+ */
+const APP_PORTS = { app: 3000, console: 3002, demo: 3003 } as const;
 
 /**
  * Where mail comes from and where the apps live, when the config says nothing.
  *
- * **`mail` is not decorative** — it is the only place the app origins are written
- * down, and three things read them, each failing differently when it is missing:
- * the API's CORS allow-list, the asset bucket's CORS rule, and the
- * `NEXT_PUBLIC_*` URLs a deploy writes into each app. A config without it is not a
- * config missing a nicety; it is a deploy that produces an API no browser can
- * call, and a stack that throws a `TypeError` while reading `undefined.appBaseUrl`.
+ * **The `mail` block is where a stage declares its app origins**, which is a
+ * misleading name for it and the reason this comment exists: nothing sends mail
+ * from these three values. They are read by `appOrigins` below, and nothing else —
+ * the `NEXT_PUBLIC_*` URLs a deployed app needs are the stacks' *outputs*
+ * (`ApiUrl`, the pool id), which whoever deploys writes into each app.
  *
  * A default is still better than a refusal, because this file is written by the
  * console *and* edited by hand, and the console's path for a brand-new environment
@@ -184,6 +189,63 @@ export function defaultMail(stage: string): MailSettings {
     studioBaseUrl: `http://localhost:${APP_PORTS.app}/studio`,
     consoleBaseUrl: `http://localhost:${APP_PORTS.console}`,
   };
+}
+
+/**
+ * The browser origins this environment's apps are served from.
+ *
+ * **Every URL is read as its origin, and an origin is scheme, host and port with no
+ * path.** A CORS allow-list is compared against the `Origin` header, which never
+ * carries a path — so `mail.studioBaseUrl`, which defaults to
+ * `http://localhost:3000/studio` because the studio *is* the app at a path, would
+ * otherwise sit in the list as an entry that can never match anything. Reducing
+ * every URL to its origin is what makes the studio's own default usable.
+ *
+ * **It reads both places the config says where an app lives, because one is not
+ * enough to rely on.** `auth.callbackUrls` has to name a domain for anybody to sign
+ * in there, so a domain in that list is a domain a browser will call this API from
+ * — and a CORS list that does not include it is a preflight the browser refuses,
+ * which surfaces as a CORS error that looks like a network problem rather than like
+ * a missing config field. A domain added to one list and forgotten in the other is
+ * the failure this function exists to make impossible.
+ *
+ * The local ports are unconditional. Every app runs on `localhost` before it runs
+ * anywhere else, and an API that cannot be called by the studio on the machine the
+ * studio is being written on is an API nobody can develop against. There is no
+ * 3001: the studio is the app at `/studio` rather than a process of its own, and an
+ * origin nothing can be served from looks like it is doing something.
+ */
+export function appOrigins(config: AcharConfig): string[] {
+  const declared = [
+    config.mail.appBaseUrl,
+    config.mail.studioBaseUrl,
+    config.mail.consoleBaseUrl,
+    ...config.auth.callbackUrls,
+    ...config.auth.logoutUrls,
+  ];
+
+  const origins = new Set<string>();
+  for (const url of declared) {
+    const origin = originOf(url);
+    if (origin) origins.add(origin);
+  }
+
+  for (const port of Object.values(APP_PORTS)) origins.add(`http://localhost:${port}`);
+
+  return [...origins];
+}
+
+/** A URL as its origin, or nothing when it is not one this can read. */
+function originOf(url: string): string | undefined {
+  try {
+    const { origin } = new URL(url);
+    // `new URL` answers the *string* `'null'` for a scheme it cannot reduce —
+    // `file:`, a bare `mailto:` — and 'null' in a CORS list matches nothing while
+    // looking like an entry.
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
