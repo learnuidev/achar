@@ -28,12 +28,15 @@
 
 import type {
   AcharDocument,
+  DatasetSchema,
   DocumentMutation,
   DocumentSummary,
   MutationResponse,
   MutationResult,
   Perspective,
   ProjectRole,
+  SchemaField,
+  SchemaType,
 } from '@achar/types';
 import {
   Keys,
@@ -51,8 +54,14 @@ import {
   type Item,
   type Key,
 } from './dynamo';
-import { coalesceSpans } from '@achar/schema';
-import { withAssetUrls } from './assets';
+import { coalesceSpans, referenceIdOf, shapeDocument } from '@achar/schema';
+import {
+  assetIdFromReference,
+  assetUrlsForReferences,
+  collectAssetReferences,
+  withAssetUrls,
+} from './assets';
+import { documentType } from './schemas';
 import { HttpError } from './http';
 import { rev as newRev, ulid } from './ids';
 import { forgetVersions, getVersion, snapshotVersion, type SnapshotInput } from './versions';
@@ -249,6 +258,100 @@ export function resolveRows(
   }
   if (published) return { row: published, draft: false, published: true };
   return undefined;
+}
+
+/**
+ * A document as the type that declares it: addresses for assets, documents for
+ * references.
+ *
+ * This is the delivery shape, and it is the difference between what the studio
+ * reads and what a site reads. The studio edits *documents* — an image field is a
+ * reference it can replace, an author is an id it can point somewhere else — while a
+ * site renders a *type*, where `coverImage` is an address and `author` is an author.
+ * Both are honest answers to different questions, which is why the shape is
+ * something a caller asks for rather than something this API decides for them.
+ *
+ * References resolve **one level**, read through `getDocument` at the perspective
+ * the caller asked for: the document's own references become documents whose assets
+ * are addresses and whose own references stay references. A page of posts that
+ * resolved its authors' posts would be a page of everything.
+ */
+export async function shapeForDelivery(
+  projectId: string,
+  dataset: string,
+  schema: DatasetSchema,
+  document: Record<string, unknown>,
+  perspective: Perspective,
+): Promise<Record<string, unknown>> {
+  const type = documentType(schema, typeof document._type === 'string' ? document._type : '');
+  // Not a type this dataset declares: nothing to shape it by, and a schema is not a
+  // filter — the document is answered as it stands.
+  if (!type) return document;
+
+  const entities = new Map<string, { type: SchemaType; document: Record<string, unknown> }>();
+  for (const id of collectReferenceIds(type, document)) {
+    const found = await getDocument(projectId, dataset, id, perspective, false);
+    if (!found) continue;
+    const entityType = documentType(schema, typeof found._type === 'string' ? found._type : '');
+    if (entityType) entities.set(id, { type: entityType, document: found });
+  }
+
+  // One asset pass for the document *and* for everything it resolved to, so a page
+  // of posts illustrated with six covers costs six reads rather than one per field.
+  const references = [
+    ...collectAssetReferences(document),
+    ...[...entities.values()].flatMap((entity) => collectAssetReferences(entity.document)),
+  ];
+  const urls = await assetUrlsForReferences(projectId, dataset, references);
+  const assetUrl = (reference: string): string | undefined => {
+    const id = assetIdFromReference(reference);
+    return id ? urls.get(id) : undefined;
+  };
+
+  // The entities first, each shaped with assets and **no** reference resolver: that
+  // absent resolver is what makes the depth of this exactly one level.
+  const shaped = new Map<string, unknown>();
+  for (const [id, entity] of entities) {
+    shaped.set(id, shapeDocument(entity.type, entity.document, { assetUrl }));
+  }
+
+  return shapeDocument(type, document, { assetUrl, reference: (id) => shaped.get(id) });
+}
+
+/** The ids a document's reference fields name, at any depth in its declared shapes. */
+function collectReferenceIds(type: SchemaType, document: Record<string, unknown>): string[] {
+  const found: string[] = [];
+  walkDeclaredFields(type.fields, document, (field, value) => {
+    if (field.type !== 'reference') return;
+    const id = referenceIdOf(value);
+    if (id) found.push(id);
+  });
+  return [...new Set(found)];
+}
+
+/** Every value the type declares a field for, following objects and lists of them. */
+function walkDeclaredFields(
+  fields: SchemaField[],
+  value: unknown,
+  visit: (field: SchemaField, value: unknown) => void,
+): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return;
+  const declared = new Map(fields.map((field) => [field.name, field]));
+
+  for (const [name, entry] of Object.entries(value as Record<string, unknown>)) {
+    const field = declared.get(name);
+    if (!field) continue;
+    visit(field, entry);
+
+    if (field.type === 'object') walkDeclaredFields(field.fields ?? [], entry, visit);
+
+    if (field.type === 'array' && Array.isArray(entry)) {
+      const item = (field.of ?? [])[0];
+      if (item?.type === 'object') {
+        for (const member of entry) walkDeclaredFields(item.fields ?? [], member, visit);
+      }
+    }
+  }
 }
 
 /**

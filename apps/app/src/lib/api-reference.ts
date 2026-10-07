@@ -127,6 +127,22 @@ const LIMIT: ApiParameter = {
   example: '20',
 };
 
+/**
+ * How much of a document to resolve.
+ *
+ * The one parameter on this API that changes a *shape* rather than selecting data,
+ * and it is here because there are two honest answers and they are for different
+ * readers: a site renders a type, an editor edits a row.
+ */
+const SHAPE: ApiParameter = {
+  in: 'query',
+  name: 'shape',
+  type: '"schema" | "stored"',
+  description:
+    'Defaults to `schema`: a document as the type that declares it — an asset field is its CDN address, a reference is the document it names, resolved one level. `stored` answers the row: an asset reference and a `{_ref}`. The studio asks for `stored`, because it edits references rather than the documents they name.',
+  example: 'schema',
+};
+
 const DOCUMENT_FIELDS: ApiField[] = [
   { name: '_id', type: 'string', description: 'The document’s id, unprefixed.' },
   { name: '_type', type: 'string', description: 'The content type it is, which is what the schema calls it.' },
@@ -201,6 +217,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
             example: '{"type":"post"}',
           },
           PERSPECTIVE,
+          SHAPE,
         ],
         responseStatus: '200 OK',
         responseExample: `{
@@ -212,6 +229,9 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
       "_rev": "01JQ8Z…",
       "_createdAt": "2026-02-14T11:02:00.000Z",
       "_updatedAt": "2026-03-01T09:00:00.000Z",
+      "title": "Hello world",
+      "coverImage": "https://cdn.example/assets/…/cover.png",
+      "author": { "_id": "maya", "_type": "author", "name": "Maya" },
       "body": [
         {
           "_type": "block",
@@ -236,9 +256,10 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           { name: 'documentsRead', type: 'integer', description: 'How many documents the query read, not how many it returned.' },
         ],
         notes: [
+          'A **projection** is answered exactly as it was written: `{title, "author": author->name}` is those two fields, and shaping does not touch a shape you chose. Whole documents — anything carrying a `_type` — are the ones shaped.',
           'The GROQ subset is stated in `services/api/src/lib/groq`: `*`, filters, `&&`, `||`, `!`, comparisons, `in`, `match`, `defined()`, `count()`, `order()`, slices, projections, `->`, `^`, `$param` and the pipe operator. Anything outside it is a **400 naming the position**, never a silently empty result.',
           'A query that reads a `previewDrafts` perspective sees drafts; the default does not.',
-          '**A field that holds an asset is answered with its address.** An `image`, `video` or `file` field comes back as its reference *and* a `url` — the full CDN address of the bytes — at any depth in a projection, so a client draws a picture without a second request. The reference is kept because that is what can be written back; an address baked into a document stops working when the distribution changes.',
+          '**A whole document is answered as the type that declares it.** An `image`, `video` or `file` field is the full CDN address as a string, and a reference field — `author` — is the document it names, resolved one level: the author’s own asset fields are addresses and its references stay references. `null` means the thing pointed at is gone. Ask for `shape=stored` to get the rows instead, which is what an editor works with.',
           '**A field that is portable text is answered in its canonical form**: a block’s text is one span per run of marks, not one span per keystroke. `"this is a body"` is one span, and a `strong` phrase inside it is a second — which is the shape the schema describes and the one a person can read.',
         ],
       },
@@ -287,7 +308,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         description:
           'A document by id, at one perspective. `published` is the default because that is what a site serves; an editor asks for `previewDrafts` by name.',
         auth: 'token',
-        parameters: [PROJECT_ID, DATASET, DOCUMENT_ID, PERSPECTIVE],
+        parameters: [PROJECT_ID, DATASET, DOCUMENT_ID, PERSPECTIVE, SHAPE],
         responseStatus: '200 OK',
         responseExample: `{
   "_id": "hello-world",
@@ -298,12 +319,14 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
   "_draft": false,
   "_published": true,
   "_editable": false,
-  "title": "Hello world"
+  "title": "Hello world",
+  "coverImage": "https://cdn.example/assets/…/cover.png",
+  "author": { "_id": "maya", "_type": "author", "name": "Maya" }
 }`,
         responseFields: DOCUMENT_FIELDS,
         notes: [
           'A document that exists only as a draft answers **404** at `published` rather than an empty body, because that is what it is: not published, and not a thing this caller can be told about.',
-          'An `image`, `video` or `file` field carries a `url` beside its reference — the full CDN address — so the answer can be drawn without a second request.',
+          'Shaped as the type that declares it, by default: an asset field is its CDN address as a string, and a reference field is the document it names. `shape=stored` answers the row instead — an asset reference and a `{_ref}` — which is what the studio reads and writes.',
           'A field that is portable text is answered in its canonical form: one span per run of marks.',
         ],
       },
@@ -1103,4 +1126,5 @@ export const API_CONVENTIONS: string[] = [
   'Lists are paged by an opaque `nextToken` rather than by an offset, and a page answers with `nextToken: null` when it is the last one.',
   'Errors are one envelope — see below — and `code` is the part a program should branch on. `message` is written for a person.',
   'Documents are written as documents, not as fields: `mutate` takes operations rather than a shape per endpoint, and a publish is an operation rather than a flag.',
+  'A whole document is answered **as the type that declares it** — assets as addresses, references as the documents they name — and `?shape=stored` answers the row instead. It is the one parameter that changes a shape rather than selecting data, and it exists because a site and an editor want different things from the same document.',
 ];

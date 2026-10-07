@@ -170,6 +170,27 @@ function assertUsableTypes(types: SchemaType[]): void {
   }
 }
 
+/**
+ * How a caller asked for a document to be shaped.
+ *
+ * - `schema` — **the default**, and what a site wants: an `image` field is an
+ *   address, a reference is the document it names.
+ * - `stored` — what the studio wants: an `image` field is a reference it can
+ *   replace, a reference is an id it can point somewhere else.
+ *
+ * An unknown value is refused rather than defaulted: a caller that asked for
+ * something this API does not offer has a bug, and answering with a different shape
+ * than the one it asked for is how that bug becomes a rendering problem instead of
+ * a 400.
+ */
+export type DocumentShape = 'schema' | 'stored';
+
+export function requireDocumentShape(value: string | undefined): DocumentShape {
+  if (value === undefined || value === '') return 'schema';
+  if (value === 'schema' || value === 'stored') return value;
+  throw new HttpError(400, 'BAD_REQUEST', 'shape must be `schema` or `stored`', { field: 'shape' });
+}
+
 /** The type a document names, or `undefined` when the schema has never heard of it. */
 export function documentType(schema: DatasetSchema, name: string): SchemaType | undefined {
   return schema.types.find((type) => type.name === name && type.kind !== 'object');

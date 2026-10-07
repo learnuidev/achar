@@ -14,8 +14,15 @@
 
 import { requireDatasetAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
-import { editableFor, getDocument, requirePerspective, publishedIdOf } from '../../lib/documents';
+import {
+  editableFor,
+  getDocument,
+  requirePerspective,
+  publishedIdOf,
+  shapeForDelivery,
+} from '../../lib/documents';
 import { HttpError, json, pathParam, queryParam, withHandler, type ApiEvent } from '../../lib/http';
+import { getDatasetSchema, requireDocumentShape } from '../../lib/schemas';
 
 async function main(event: ApiEvent) {
   const viewer = await requireViewer(event);
@@ -36,7 +43,12 @@ async function main(event: ApiEvent) {
     throw new HttpError(404, 'DOCUMENT_NOT_FOUND', `Document ${id} not found`, { documentId: id });
   }
 
-  return json(document);
+  // `?shape=schema` by default: what a site renders. The studio asks for `stored`,
+  // because an editor edits references rather than the documents they name.
+  const shape = requireDocumentShape(queryParam(event, 'shape'));
+  if (shape === 'stored') return json(document);
+
+  return json(await shapeForDelivery(projectId, dataset, await getDatasetSchema(projectId, dataset), document, perspective));
 }
 
 export const handler = withHandler(main);

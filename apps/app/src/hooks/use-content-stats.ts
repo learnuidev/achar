@@ -49,6 +49,9 @@ export function useContentStats(
         const answer = await client.query<AcharDocument[]>(projectId, dataset, {
           query: '* | order(_updatedAt desc)[0...8]',
           perspective: 'previewDrafts',
+          // The studio draws these rows with the same components the editor uses,
+          // so they are read the way the editor reads them.
+          shape: 'stored',
         });
         return Array.isArray(answer.result) ? answer.result : [];
       })(),

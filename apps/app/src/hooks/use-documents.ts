@@ -74,7 +74,11 @@ export function useDocument(
   perspective: Perspective,
 ): Resource<AcharDocument> {
   return useResource(`document:${projectId}/${dataset}/${documentId}:${perspective}`, (client) =>
-    client.getDocument(projectId, dataset, documentId, { perspective }),
+    // `shape: 'stored'` in the one place it matters: the studio edits a *document* —
+    // an image field is a reference it can replace and an author is an id it can
+    // point somewhere else — where a site reads a *type*, whose fields are addresses
+    // and documents. See `shapeForDelivery`.
+    client.getDocument(projectId, dataset, documentId, { perspective, shape: 'stored' }),
   );
 }
 
@@ -117,8 +121,15 @@ export function useDocumentPair(
       if (skip) return { shown: null, published: null, hasDraft: false };
 
       const [shown, raw] = await Promise.all([
-        readOr404(client.getDocument(projectId, dataset, documentId, { perspective: 'previewDrafts' })),
-        readOr404(client.getDocument(projectId, dataset, documentId, { perspective: 'raw' })),
+        readOr404(
+          client.getDocument(projectId, dataset, documentId, {
+            perspective: 'previewDrafts',
+            shape: 'stored',
+          }),
+        ),
+        readOr404(
+          client.getDocument(projectId, dataset, documentId, { perspective: 'raw', shape: 'stored' }),
+        ),
       ]);
 
       return {

@@ -315,6 +315,15 @@ export interface QueryRequest {
   /** `$name` values the query refers to. */
   params?: Record<string, unknown>;
   perspective?: Perspective;
+  /**
+   * How whole documents in the answer are shaped.
+   *
+   * `schema` — the default — answers them as the types that declare them: an `image`
+   * field is an address, a reference is the document it names. `stored` answers the
+   * rows, which is what an editor works with. A projection is left exactly as it was
+   * written either way, because that shape was the client's choice.
+   */
+  shape?: 'schema' | 'stored';
   /** How many documents one answer may carry, before the query's own slice. */
   limit?: number;
 }

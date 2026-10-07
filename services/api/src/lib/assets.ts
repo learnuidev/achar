@@ -422,7 +422,7 @@ export async function withAssetUrls<T>(
 }
 
 /** Every asset reference in a value, at any depth. */
-function collectAssetReferences(value: unknown, into: string[] = []): string[] {
+export function collectAssetReferences(value: unknown, into: string[] = []): string[] {
   if (Array.isArray(value)) {
     for (const entry of value) collectAssetReferences(entry, into);
     return into;

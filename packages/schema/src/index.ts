@@ -5,6 +5,7 @@ export * from './preview';
 export * from './slug';
 export * from './introspect';
 export * from './portable-text';
+export * from './shape';
 export * from './ts';
 export * from './default-schema';
 export * from './seed';

@@ -14,9 +14,12 @@
  * language with a private vocabulary.
  */
 
+import type { Perspective } from '@achar/types';
 import { parse, evaluate, typeHintOf } from '../../lib/groq';
 import { requireDatasetAccess } from '../../lib/access';
 import { withAssetUrls } from '../../lib/assets';
+import { shapeForDelivery } from '../../lib/documents';
+import { getDatasetSchema, requireDocumentShape, type DocumentShape } from '../../lib/schemas';
 import { requireViewer } from '../../lib/auth';
 import {
   editableFor,
@@ -54,6 +57,7 @@ async function main(event: ApiEvent) {
   // be handed a draft: `published` is the default here rather than the `raw` the
   // studio asks for by name.
   const perspective = requirePerspective(queryParam(event, 'perspective'), 'published');
+  const shape = requireDocumentShape(queryParam(event, 'shape'));
   const params = parseParams(queryParam(event, 'params'));
   const limit = Math.min(readLimit(queryParam(event, 'limit')), MAX_LIMIT);
   const editable = editableFor(access.role);
@@ -88,11 +92,53 @@ async function main(event: ApiEvent) {
     // Whatever the query projected, with the CDN address of every asset in it: a
     // projection is a value the client did not get to choose the shape of, so this
     // walks it rather than assuming documents.
-    result: await withAssetUrls(projectId, dataset, result),
+    result: await shapeResult(projectId, dataset, perspective, result, shape),
     ms: Date.now() - started,
     perspective,
     documentsRead: page.rows.length,
   });
+}
+
+/**
+ * The result, with every whole document in it shaped.
+ *
+ * A projection is a shape the client chose, and this walks the *value* rather than
+ * assuming documents: anything that names a `_type` this dataset declares is shaped,
+ * and everything else — a projection's own fields, a count, a slice — is left as the
+ * query wrote it. That is the line between the two: a query that asked for
+ * `{title, "author": author->name}` gets exactly that, and a query that asked for
+ * the documents gets the documents as their types.
+ *
+ * `stored` skips all of it and resolves assets only, which is what the studio asks
+ * for — the same answer the asset walk gave before any of this existed.
+ */
+async function shapeResult(
+  projectId: string,
+  dataset: string,
+  perspective: Perspective,
+  result: unknown,
+  shape: DocumentShape,
+): Promise<unknown> {
+  if (shape === 'stored') return withAssetUrls(projectId, dataset, result);
+
+  const schema = await getDatasetSchema(projectId, dataset);
+  const walk = async (value: unknown): Promise<unknown> => {
+    if (Array.isArray(value)) return Promise.all(value.map(walk));
+    if (typeof value !== 'object' || value === null) return value;
+
+    const record = value as Record<string, unknown>;
+    if (typeof record._type === 'string') {
+      const shaped = await shapeForDelivery(projectId, dataset, schema, record, perspective);
+      // A type this dataset does not declare: assets are still addresses.
+      return shaped === record ? withAssetUrls(projectId, dataset, record) : shaped;
+    }
+
+    const next: Record<string, unknown> = {};
+    for (const [name, entry] of Object.entries(record)) next[name] = await walk(entry);
+    return next;
+  };
+
+  return walk(result);
 }
 
 /** `?params={"type":"post"}` — an object, or nothing, and never a silent `{}`. */

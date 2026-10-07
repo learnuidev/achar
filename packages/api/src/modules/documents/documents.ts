@@ -37,8 +37,20 @@ export interface ListDocumentsOptions {
   order?: string;
 }
 
+export type DocumentShape = 'schema' | 'stored';
+
 export interface GetDocumentOptions {
   perspective?: Perspective;
+  /**
+   * How to shape the answer.
+   *
+   * `schema` — the default — is what a site renders: an `image` field is an address,
+   * a reference is the document it names. `stored` is what an editor works with: an
+   * image field is a reference it can replace and a reference is an id it can point
+   * somewhere else. The studio asks for `stored` for the same reason it writes
+   * references rather than the documents they name.
+   */
+  shape?: DocumentShape;
 }
 
 /**
@@ -58,6 +70,7 @@ export function query<T>(
     query: req.query,
     params: req.params ? JSON.stringify(req.params) : undefined,
     perspective: req.perspective,
+    shape: req.shape,
     limit: req.limit,
   });
   return api.get<QueryResult<T>>(`/v1/data/query/${projectId}/${dataset}${search}`);
@@ -99,7 +112,7 @@ export function getDocument(
   perspective?: Perspective | GetDocumentOptions,
 ): Promise<AcharDocument> {
   const options = typeof perspective === 'string' ? { perspective } : perspective;
-  const search = queryString({ perspective: options?.perspective });
+  const search = queryString({ perspective: options?.perspective, shape: options?.shape });
   return api.get<AcharDocument>(
     `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}${search}`,
   );
