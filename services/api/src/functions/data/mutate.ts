@@ -40,6 +40,7 @@ const OPERATIONS = [
   'delete',
   'publish',
   'unpublish',
+  'restore',
 ] as const;
 
 async function main(event: ApiEvent) {
@@ -56,7 +57,8 @@ async function main(event: ApiEvent) {
   // decides whether a document is a document, and a batch that fetched it three
   // times would be three reads of a row that cannot change underneath it.
   const schema = await getDatasetSchema(projectId, dataset);
-  const validate = (document: AcharDocument): void => assertValidDocument(schema, document);
+  const validate = (document: AcharDocument, stage: 'draft' | 'published'): void =>
+    assertValidDocument(schema, document, { requireComplete: stage === 'published' });
 
   const applied = await applyMutations({
     projectId,
@@ -64,6 +66,9 @@ async function main(event: ApiEvent) {
     mutations,
     atomic,
     validate,
+    // Recorded on the version a publish leaves behind, so a history says who
+    // published what rather than only when.
+    publishedBy: viewer.userId,
   });
 
   if (applied.created || applied.deleted) {

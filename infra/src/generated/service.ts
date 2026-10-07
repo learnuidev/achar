@@ -226,6 +226,30 @@ export const TABLES: TableSpec[] = [
     grantsIndexes: true,
   },
   {
+    id: 'VersionsTable',
+    envVar: 'VERSIONS_TABLE',
+    billingMode: 'PAY_PER_REQUEST',
+    attributeDefinitions: [
+      { name: 'datasetKey', type: 'S' },
+      { name: 'versionKey', type: 'S' },
+    ],
+    // The dataset is the hash key and `{documentId}#v{version}` the range key:
+    // a dataset's history is one query, and one document's is that query with a
+    // `begins_with` on the range — which is how a cascade and a history panel
+    // both read it, without an index for either.
+    keySchema: [
+      { name: 'datasetKey', keyType: 'HASH' },
+      { name: 'versionKey', keyType: 'RANGE' },
+    ],
+    globalSecondaryIndexes: [],
+    // **No `dynamodb:UpdateItem`.** A version is written once and never changes,
+    // and the policy is where that is said: a history a handler could rewrite is
+    // not a history, and the absence of the action is what makes that structural
+    // rather than a rule somebody has to remember.
+    actions: ['dynamodb:DeleteItem', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+    grantsIndexes: false,
+  },
+  {
     id: 'AssetsTable',
     envVar: 'ASSETS_TABLE',
     billingMode: 'PAY_PER_REQUEST',
@@ -696,6 +720,32 @@ export const FUNCTIONS: FunctionSpec[] = [
     memorySize: 512,
     description: 'One document, at one perspective.',
     http: [{ path: '/v1/data/doc/{projectId}/{dataset}/{documentId}', method: 'GET', authorized: false }],
+  },
+  {
+    key: 'list-versions',
+    entry: 'src/functions/data/list-versions.ts',
+    handlerExport: 'handler',
+    timeout: 29,
+    memorySize: 512,
+    description: 'What a document has said, every time it was published.',
+    http: [
+      { path: '/v1/data/doc/{projectId}/{dataset}/{docId}/versions', method: 'GET', authorized: false },
+    ],
+  },
+  {
+    key: 'get-version',
+    entry: 'src/functions/data/get-version.ts',
+    handlerExport: 'handler',
+    timeout: 29,
+    memorySize: 512,
+    description: 'One published version of a document, as it was.',
+    http: [
+      {
+        path: '/v1/data/doc/{projectId}/{dataset}/{docId}/versions/{version}',
+        method: 'GET',
+        authorized: false,
+      },
+    ],
   },
   {
     key: 'mutate-documents',

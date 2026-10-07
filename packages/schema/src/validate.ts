@@ -17,15 +17,37 @@ export interface SchemaIssue {
  * A field the schema does not declare is not an issue: content is open, a
  * migration may write a field before its schema is published, and the system
  * fields all begin `_` precisely so that they are nobody's to declare.
+ *
+ * **`requireComplete` is the difference between a draft and a published
+ * document.** A draft is a place for a half-written document — that is what it is
+ * for — so a required field that is missing or empty is not yet a complaint about
+ * one: it is a field nobody has got to. Everything else is still checked, because
+ * a draft holding a number where the schema says string is a mistake at any stage.
+ * Publishing asks for both, which is where a document either is one or is not.
  */
-export function validateDocument(type: SchemaType, value: unknown): SchemaIssue[] {
+export interface ValidateOptions {
+  /**
+   * Whether a required field has to be present and not empty.
+   *
+   * True by default, because the caller with the strongest opinion here is a form
+   * drawing a document somebody is about to publish. A store writing a draft
+   * passes false.
+   */
+  requireComplete?: boolean;
+}
+
+export function validateDocument(
+  type: SchemaType,
+  value: unknown,
+  options: ValidateOptions = {},
+): SchemaIssue[] {
   if (!isRecord(value)) {
     return [{ path: '', message: `must be an object — ${type.name} fields are named properties` }];
   }
 
   const issues: SchemaIssue[] = [];
   for (const field of type.fields) {
-    checkField(field, value[field.name], field.name, issues);
+    checkField(field, value[field.name], field.name, issues, options);
   }
   return issues;
 }
@@ -35,13 +57,16 @@ function checkField(
   value: unknown,
   path: string,
   issues: SchemaIssue[],
+  options: ValidateOptions,
 ): void {
+  const complete = options.requireComplete ?? true;
+
   if (value === undefined || value === null) {
-    if (field.required) issues.push({ path, message: 'is required' });
+    if (field.required && complete) issues.push({ path, message: 'is required' });
     return;
   }
 
-  if (field.required && isBlank(value)) {
+  if (field.required && complete && isBlank(value)) {
     issues.push({ path, message: 'must not be empty' });
     return;
   }
@@ -84,6 +109,7 @@ function checkField(
       if (typeof value !== 'boolean') issues.push({ path, message: 'must be true or false' });
       return;
     case 'image':
+    case 'video':
     case 'file':
       checkAsset(value, path, issues);
       return;
@@ -94,10 +120,10 @@ function checkField(
       checkPortableText(value, path, issues);
       return;
     case 'array':
-      checkArray(field, value, path, issues);
+      checkArray(field, value, path, issues, options);
       return;
     case 'object':
-      checkObject(field, value, path, issues);
+      checkObject(field, value, path, issues, options);
       return;
   }
 }
@@ -211,6 +237,7 @@ function checkArray(
   value: unknown,
   path: string,
   issues: SchemaIssue[],
+  options: ValidateOptions,
 ): void {
   if (!Array.isArray(value)) {
     issues.push({ path, message: 'must be a list' });
@@ -228,7 +255,7 @@ function checkArray(
 
   value.forEach((item, index) => {
     const itemPath = `${path}[${index}]`;
-    const member = members.find((candidate) => accepts(candidate, item, itemPath));
+    const member = members.find((candidate) => accepts(candidate, item, itemPath, options));
     if (!member) {
       // A union of several: the item is refused with the list it had to be one
       // of, because the alternative is the last member's complaints about a
@@ -237,7 +264,7 @@ function checkArray(
       issues.push({ path: itemPath, message: `must be one of ${names}` });
       return;
     }
-    checkField(member, item, itemPath, issues);
+    checkField(member, item, itemPath, issues, options);
   });
 }
 
@@ -246,20 +273,28 @@ function checkObject(
   value: unknown,
   path: string,
   issues: SchemaIssue[],
+  options: ValidateOptions,
 ): void {
   if (!isRecord(value)) {
     issues.push({ path, message: 'must be an object' });
     return;
   }
+  // A nested required field is subject to the same rule as a top-level one: in a
+  // draft it is a field nobody has got to yet, not a document that is wrong.
   for (const sub of field.fields ?? []) {
-    checkField(sub, value[sub.name], `${path}.${sub.name}`, issues);
+    checkField(sub, value[sub.name], `${path}.${sub.name}`, issues, options);
   }
 }
 
 /** Whether a field takes this value without complaint — what a union is chosen by. */
-function accepts(field: SchemaField, value: unknown, path: string): boolean {
+function accepts(
+  field: SchemaField,
+  value: unknown,
+  path: string,
+  options: ValidateOptions,
+): boolean {
   const probe: SchemaIssue[] = [];
-  checkField(field, value, path, probe);
+  checkField(field, value, path, probe, options);
   return probe.length === 0;
 }
 

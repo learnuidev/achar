@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { FileIcon, ImageIcon, SearchIcon } from 'lucide-react';
-import type { Asset } from '@achar/types';
+import { FileIcon, ImageIcon, SearchIcon, VideoIcon } from 'lucide-react';
+import type { Asset, AssetKind } from '@achar/types';
 import {
   Dialog,
   DialogContent,
@@ -43,11 +43,11 @@ export function AssetPicker({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (asset: Asset) => void;
-  accept?: 'image' | 'file';
+  accept?: AssetKind;
 }): React.ReactElement {
   const library = useAssetLibrary();
   const [term, setTerm] = useState('');
-  const kind = accept ?? 'image';
+  const kind: AssetKind = accept ?? 'image';
 
   const needle = term.trim().toLowerCase();
   const items = library.assets
@@ -65,7 +65,9 @@ export function AssetPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{kind === 'image' ? 'Choose an image' : 'Choose a file'}</DialogTitle>
+          <DialogTitle>
+            {kind === 'image' ? 'Choose an image' : kind === 'video' ? 'Choose a video' : 'Choose a file'}
+          </DialogTitle>
           <DialogDescription>
             The field keeps the asset&rsquo;s reference and not its bytes, and the library resolves
             that reference to a URL on read — so any number of documents can point at one asset
@@ -103,9 +105,21 @@ export function AssetPicker({
           ) : empty ? (
             <EmptyState
               icon={
-                kind === 'image' ? <ImageIcon className="size-5" /> : <FileIcon className="size-5" />
+                kind === 'image' ? (
+                  <ImageIcon className="size-5" />
+                ) : kind === 'video' ? (
+                  <VideoIcon className="size-5" />
+                ) : (
+                  <FileIcon className="size-5" />
+                )
               }
-              title={kind === 'image' ? 'The library has no images yet' : 'The library is empty'}
+              title={
+                kind === 'image'
+                  ? 'The library has no images yet'
+                  : kind === 'video'
+                    ? 'The library has no videos yet'
+                    : 'The library is empty'
+              }
               description="Drop a file on the strip above and it lands here immediately — upload and choose are the same dialog on purpose, because the file somebody wants is usually the one they have not uploaded yet."
             />
           ) : items.length === 0 ? (
@@ -115,10 +129,10 @@ export function AssetPicker({
               description={
                 needle
                   ? 'Search reads filenames only. A file is called whatever it was called when it was uploaded.'
-                  : `This dataset's library holds no ${kind === 'image' ? 'images' : 'files'} yet.`
+                  : `This dataset's library holds no ${kind === 'image' ? 'images' : kind === 'video' ? 'videos' : 'files'} yet.`
               }
             />
-          ) : kind === 'image' ? (
+          ) : kind === 'image' || kind === 'video' ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {items.map((asset) => (
                 <button
@@ -130,13 +144,23 @@ export function AssetPicker({
                     'hover:border-ring/60 hover:bg-accent/40',
                   )}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- the CDN host is not in `remotePatterns`, and the URL is already transformed. */}
-                  <img
-                    src={asset.url}
-                    alt={asset.filename}
-                    loading="lazy"
-                    className="h-24 w-full rounded-lg border border-border object-cover"
-                  />
+                  {asset.kind === 'video' ? (
+                    <video
+                      src={asset.url}
+                      preload="metadata"
+                      muted
+                      playsInline
+                      className="h-24 w-full rounded-lg border border-border bg-black object-cover"
+                    />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element -- the CDN host is not in `remotePatterns`, and the URL is already transformed. */
+                    <img
+                      src={asset.url}
+                      alt={asset.filename}
+                      loading="lazy"
+                      className="h-24 w-full rounded-lg border border-border object-cover"
+                    />
+                  )}
                   <p className="mt-2 truncate text-xs">{asset.filename}</p>
                   <p className="truncate text-xs text-muted-foreground">{describe(asset)}</p>
                 </button>

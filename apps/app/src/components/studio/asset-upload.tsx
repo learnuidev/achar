@@ -4,7 +4,7 @@ import { useRef, useState, type DragEvent } from 'react';
 import { Loader2Icon, UploadIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadAsset } from '@achar/api';
-import type { Asset } from '@achar/types';
+import type { Asset, AssetKind } from '@achar/types';
 import { Button, cn } from '@achar/ui';
 import { useAssetLibrary } from '@/components/studio/asset-library';
 import { useAcharClient } from '@/components/client-provider';
@@ -17,6 +17,31 @@ interface Uploading {
   key: number;
   name: string;
   percent: number;
+}
+
+/**
+ * Which surface a dropped file belongs on.
+ *
+ * The same rule the upload client uses, by the same two facts — the browser's own
+ * content type, then the extension for a file that arrives without one — so that a
+ * video dropped on a video surface is not refused by this filter and then filed
+ * somewhere the video field cannot find it.
+ */
+function kindOfFile(file: File): AssetKind {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+
+  const extension = /\.([A-Za-z0-9]{1,8})$/.exec(file.name)?.[1]?.toLowerCase() ?? '';
+  if (['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv'].includes(extension)) return 'video';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(extension)) return 'image';
+  return 'file';
+}
+
+/** What an `accept` attribute is worth: a hint for the file picker, and nothing more. */
+function acceptAttribute(accept: AssetKind | 'all' | undefined): string | undefined {
+  if (accept === 'image') return 'image/*';
+  if (accept === 'video') return 'video/*';
+  return undefined;
 }
 
 /**
@@ -43,7 +68,7 @@ export function AssetUpload({
   className,
   compact,
 }: {
-  accept?: 'image' | 'file' | 'all';
+  accept?: AssetKind | 'all';
   onUploaded?: (asset: Asset) => void;
   className?: string;
   compact?: boolean;
@@ -99,15 +124,22 @@ export function AssetUpload({
   }
 
   function enqueue(files: File[]) {
-    // An image surface is the one filter worth drawing here: `accept` on the
-    // input only guides the picker, and nothing stops a folder from being
-    // dropped on it. A plain file surface takes anything, because a file field
-    // may point at an image just as legally as at a PDF.
-    const wanted =
-      accept === 'image' ? files.filter((file) => file.type.startsWith('image/')) : files;
+    // A typed surface is the one filter worth drawing here: `accept` on the input
+    // only guides the picker, and nothing stops a folder from being dropped on it.
+    // A plain file surface takes anything, because a file field may point at an
+    // image just as legally as at a PDF.
+    const wanted = accept === 'all' ? files : files.filter((file) => kindOfFile(file) === accept);
 
     if (wanted.length === 0) {
-      if (files.length > 0) toast.error('Only images can go here');
+      if (files.length > 0) {
+        toast.error(
+          accept === 'video'
+            ? 'Only videos can go here'
+            : accept === 'image'
+              ? 'Only images can go here'
+              : 'That is not the kind of file this field holds',
+        );
+      }
       return;
     }
 
@@ -170,7 +202,9 @@ export function AssetUpload({
                 ? 'Drop to upload'
                 : accept === 'image'
                   ? 'Drop images here, or'
-                  : 'Drop files here, or'}
+                  : accept === 'video'
+                    ? 'Drop videos here, or'
+                    : 'Drop files here, or'}
             </span>
             <Button
               type="button"
@@ -196,12 +230,18 @@ export function AssetUpload({
               )}
             </div>
             <p className="mt-3 text-sm font-medium">
-              {dragging ? 'Drop to upload' : 'Drop a file here, or pick one'}
+              {dragging
+                ? 'Drop to upload'
+                : accept === 'video'
+                  ? 'Drop a video here, or pick one'
+                  : 'Drop a file here, or pick one'}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {accept === 'image'
                 ? 'Images only. They are uploaded straight to storage and appear in the library the moment they land.'
-                : 'Uploaded straight to storage, and in the library the moment they land.'}
+                : accept === 'video'
+                  ? 'Videos only. MP4, MOV or WebM — they go straight to storage, and a long one uploads with the progress bar below rather than through a server.'
+                  : 'Uploaded straight to storage, and in the library the moment they land.'}
             </p>
             <Button
               type="button"
@@ -211,7 +251,7 @@ export function AssetUpload({
               onClick={() => input.current?.click()}
             >
               <UploadIcon className="size-4" />
-              Choose a file
+              {accept === 'video' ? 'Choose a video' : 'Choose a file'}
             </Button>
           </>
         )}
@@ -221,7 +261,7 @@ export function AssetUpload({
           type="file"
           multiple
           hidden
-          {...(accept === 'image' ? { accept: 'image/*' } : {})}
+          {...(acceptAttribute(accept) ? { accept: acceptAttribute(accept) } : {})}
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             // Cleared so that picking the same file twice uploads it twice: an

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { FileIcon, ImageIcon, ImagePlusIcon, ReplaceIcon, XIcon } from 'lucide-react';
-import type { Asset } from '@achar/types';
+import { FileIcon, ImageIcon, ImagePlusIcon, ReplaceIcon, VideoIcon, XIcon } from 'lucide-react';
+import type { Asset, AssetKind } from '@achar/types';
 import { Button, cn } from '@achar/ui';
 import { hasIssueAt } from '@/lib/schema';
 import { formatBytes } from '@/lib/format';
@@ -11,15 +11,22 @@ import { AssetPicker } from '@/components/editor/asset-picker';
 import { FieldShell, type FieldControlProps } from '@/components/editor/field-controls';
 
 /**
- * An image or a file field.
+ * An image, video or file field.
  *
- * What a document stores is a reference string — `image-<assetId>-1200x800-jpg` —
- * and what the studio draws is the asset behind it: the bytes go straight to S3
- * through `uploadAsset`, and this control only ever holds the reference, which is
- * why a document written here and a document written by the API resolve the same
- * way. The library resolves the reference back to a CDN URL, and a reference the
- * library no longer has draws as a labelled placeholder rather than as a broken
- * frame — a deleted asset is a fact about the document worth seeing.
+ * What a document stores is a reference string — `image-<assetId>-1200x800-jpg`,
+ * `video-<assetId>-1920x1080-mp4` — and what the studio draws is the asset behind
+ * it: the bytes go straight to S3 through `uploadAsset`, and this control only ever
+ * holds the reference, which is why a document written here and a document written
+ * by the API resolve the same way. The library resolves the reference back to a CDN
+ * URL, and a reference the library no longer has draws as a labelled placeholder
+ * rather than as a broken frame — a deleted asset is a fact about the document
+ * worth seeing.
+ *
+ * **A video is an image with a play button**, and it is a control of its own rather
+ * than a special case of one for the reason the field types are separate: what you
+ * can do with the value is different. A picture is drawn; a video is played, and the
+ * thing an editor needs to check before publishing is that the right clip is in
+ * there and that it starts where they think it does.
  */
 export function AssetField({
   field,
@@ -33,7 +40,7 @@ export function AssetField({
 }: FieldControlProps) {
   const [open, setOpen] = useState(false);
   const library = useAssetLibrary();
-  const kind = field.type === 'file' ? 'file' : 'image';
+  const kind: AssetKind = field.type === 'file' ? 'file' : field.type === 'video' ? 'video' : 'image';
 
   const reference = assetReference(value);
   const asset = library.assetFor(reference);
@@ -60,6 +67,22 @@ export function AssetField({
               {reference ? <ImageIcon className="size-5" /> : <ImagePlusIcon className="size-5" />}
             </div>
           )
+        ) : kind === 'video' ? (
+          url ? (
+            /* `preload="metadata"` and not the clip: the editor only has to show
+               which video this is, and a document with three of them should not
+               fetch three of them to be looked at. */
+            <video
+              src={url}
+              controls
+              preload="metadata"
+              className="h-20 w-32 shrink-0 rounded-lg border border-border bg-black object-cover"
+            />
+          ) : (
+            <div className="flex h-20 w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground">
+              <VideoIcon className="size-5" />
+            </div>
+          )
         ) : (
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
             <FileIcon className="size-4" />
@@ -83,7 +106,11 @@ export function AssetField({
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {kind === 'image' ? 'No image chosen' : 'No file chosen'}
+              {kind === 'image'
+                ? 'No image chosen'
+                : kind === 'video'
+                  ? 'No video chosen'
+                  : 'No file chosen'}
             </p>
           )}
         </div>

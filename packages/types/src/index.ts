@@ -161,6 +161,7 @@ export type SchemaFieldType =
   | 'url'
   | 'email'
   | 'image'
+  | 'video'
   | 'file'
   | 'reference'
   | 'portableText'
@@ -334,7 +335,8 @@ export type MutationOperation =
   | 'patch'
   | 'delete'
   | 'publish'
-  | 'unpublish';
+  | 'unpublish'
+  | 'restore';
 
 export interface MutationResult {
   documentId: string;
@@ -372,6 +374,44 @@ export interface DocumentMutation {
   publish?: { id: string };
   /** Take the published row away, leaving the draft — the draft is where it goes. */
   unpublish?: { id: string };
+  /**
+   * Put an earlier published version back, as the draft.
+   *
+   * The draft, and not the published row: what a site serves is what somebody
+   * chose to publish, and a restore that went straight to it would make reading
+   * a version a way to change production. Restoring is therefore reviewable —
+   * `publish` is the next step, and it is the one that changes the site.
+   */
+  restore?: { id: string; version: number };
+}
+
+/**
+ * One published version of a document, kept as it was at the moment it was published.
+ *
+ * A version is a snapshot rather than a diff: a diff is smaller and needs two
+ * versions to be readable, and the thing anybody asks of history is "show me what
+ * it said", which is a question a snapshot answers on its own.
+ */
+export interface DocumentVersion {
+  documentId: string;
+  /** 1 for the first publish of a document, and one more for every publish after it. */
+  version: number;
+  publishedAt: string;
+  /** The `sub` of whoever published it, or a token's id. Absent on older versions. */
+  publishedBy?: string | null;
+  /** The revision the publish produced — the same `_rev` a client saw afterwards. */
+  rev: string;
+  /** The document as it was: what `GET /v1/data/doc/…` would have answered then. */
+  document: AcharDocument;
+}
+
+/** What a history list draws, without the documents. */
+export interface DocumentVersionSummary {
+  documentId: string;
+  version: number;
+  publishedAt: string;
+  publishedBy?: string | null;
+  rev: string;
 }
 
 export interface MutationRequest {
@@ -436,7 +476,7 @@ export type PortableText = PortableTextNode[];
 // Assets
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type AssetKind = 'image' | 'file';
+export type AssetKind = 'image' | 'video' | 'file';
 
 /**
  * An uploaded file.
@@ -454,12 +494,19 @@ export interface Asset {
   filename: string;
   contentType: string;
   size: number;
-  /** Images only, read at upload time by the studio. */
+  /**
+   * Images and videos, read at upload time by the studio.
+   *
+   * For a video these are the frame size, and they are worth keeping for the reason
+   * an image's are: a page can hold the right space for something that has not
+   * arrived yet, and a video that reflows the whole layout when it loads is worse
+   * than one that does not play for a second.
+   */
   width?: number | null;
   height?: number | null;
   /** A CSS placeholder colour, so a list draws before the image arrives. */
   blurHash?: string | null;
-  /** What a document stores in a `_ref`: `image-<assetId>-<w>x<h>-<ext>`. */
+  /** What a document stores in a `_ref`: `image-<assetId>-<w>x<h>-<ext>`, `video-…`. */
   reference: string;
   url: string;
   uploadedBy: string;

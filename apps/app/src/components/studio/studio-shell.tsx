@@ -8,6 +8,7 @@ import { useDatasets } from '@/hooks/use-datasets';
 import { useProject } from '@/hooks/use-projects';
 import { useSchema } from '@/hooks/use-schema';
 import { routes } from '@/lib/routes';
+import { studioBreadcrumbs } from '@/lib/studio-breadcrumbs';
 import { documentTypesOf } from '@/lib/schema';
 import { roleLabel } from '@/lib/roles';
 import { ErrorNote } from '@/components/ui/empty-state';
@@ -108,9 +109,14 @@ export function StudioShell({
  * token.
  */
 function StudioTopBar() {
-  const { project, dataset, datasetInfo } = useStudio();
+  const { project, dataset, datasetInfo, types } = useStudio();
   const pathname = usePathname();
-  const crumbs = breadcrumbs(pathname, project.name, dataset);
+  const crumbs = studioBreadcrumbs({
+    pathname,
+    projectName: project.name,
+    dataset,
+    types,
+  });
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-4">
@@ -154,30 +160,3 @@ function StudioTopBar() {
   );
 }
 
-function breadcrumbs(
-  pathname: string,
-  projectName: string,
-  dataset: string,
-): { href: string; label: string }[] {
-  const segments = pathname.split('/').filter(Boolean);
-  // `/projects/{id}/{dataset}/…` — the project and the dataset are the two
-  // fixed crumbs; whatever follows is named for the surface it is.
-  const projectId = segments[1] ?? '';
-  const trail: { href: string; label: string }[] = [
-    { href: routes.project(projectId), label: projectName },
-    { href: routes.dataset(projectId, dataset), label: dataset },
-  ];
-
-  const rest = segments.slice(3);
-  const [section, ...tail] = rest;
-  if (!section) return trail;
-
-  if (section === 'content') {
-    trail.push({ href: routes.content(projectId, dataset, tail[0] ?? ''), label: tail[0] ?? 'Content' });
-    if (tail[1]) trail.push({ href: pathname, label: tail[1] });
-    return trail;
-  }
-
-  trail.push({ href: pathname, label: section.charAt(0).toUpperCase() + section.slice(1) });
-  return trail;
-}

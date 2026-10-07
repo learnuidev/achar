@@ -43,6 +43,7 @@ function initialValue(field: SchemaField): unknown {
     case 'object':
       return initialObject(field);
     case 'image':
+    case 'video':
     case 'file':
     case 'reference':
       // `null` rather than `''`: the editors for these three store references,

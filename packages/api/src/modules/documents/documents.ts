@@ -1,6 +1,8 @@
 import type {
   AcharDocument,
   DocumentSummary,
+  DocumentVersion,
+  DocumentVersionSummary,
   ListResponse,
   MutationRequest,
   MutationResponse,
@@ -145,6 +147,58 @@ export function unpublishDocument(
   documentId: string,
 ): Promise<MutationResponse> {
   return mutate(api, projectId, dataset, { mutations: [{ unpublish: { id: documentId } }] });
+}
+
+/**
+ * Every version of a document, newest first.
+ *
+ * A version is written when a document is published, so this is the list of
+ * publishes — `v1` is the first one and the number goes up by one each time. The
+ * entries are summaries; `getDocumentVersion` is the one that carries the content.
+ */
+export function listDocumentVersions(
+  api: ApiContext,
+  projectId: string,
+  dataset: string,
+  documentId: string,
+): Promise<DocumentVersionSummary[]> {
+  return api.get<DocumentVersionSummary[]>(
+    `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}/versions`,
+  );
+}
+
+/** One version with the document it holds — what it said at the moment it was published. */
+export function getDocumentVersion(
+  api: ApiContext,
+  projectId: string,
+  dataset: string,
+  documentId: string,
+  version: number,
+): Promise<DocumentVersion> {
+  return api.get<DocumentVersion>(
+    `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}/versions/${version}`,
+  );
+}
+
+/**
+ * Puts a version back, as the draft.
+ *
+ * A mutation rather than a route of its own, because that is what it is: one write
+ * to one document, on the same path as every other write, with the same validation
+ * and the same conflict rule. And the draft rather than the published row —
+ * restoring is a decision somebody reviews, and publishing is the step that
+ * changes what a site serves.
+ */
+export function restoreDocumentVersion(
+  api: ApiContext,
+  projectId: string,
+  dataset: string,
+  documentId: string,
+  version: number,
+): Promise<MutationResponse> {
+  return mutate(api, projectId, dataset, {
+    mutations: [{ restore: { id: documentId, version } }],
+  });
 }
 
 /** Throws the draft away. The published row, if there is one, is untouched. */

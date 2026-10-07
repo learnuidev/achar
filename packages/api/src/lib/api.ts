@@ -9,6 +9,8 @@ import type {
   DatasetExport,
   DatasetSchema,
   DocumentSummary,
+  DocumentVersion,
+  DocumentVersionSummary,
   Invitation,
   IssuedApiToken,
   ListResponse,
@@ -258,6 +260,35 @@ export class AcharClient {
     documentId: string,
   ): Promise<MutationResponse> {
     return documents.discardDraft(this.context, projectId, dataset, documentId);
+  }
+
+  /** What a document has said, every time it was published — newest first. */
+  listDocumentVersions(
+    projectId: string,
+    dataset: string,
+    documentId: string,
+  ): Promise<DocumentVersionSummary[]> {
+    return documents.listDocumentVersions(this.context, projectId, dataset, documentId);
+  }
+
+  /** One of them, with the document it holds. */
+  getDocumentVersion(
+    projectId: string,
+    dataset: string,
+    documentId: string,
+    version: number,
+  ): Promise<DocumentVersion> {
+    return documents.getDocumentVersion(this.context, projectId, dataset, documentId, version);
+  }
+
+  /** Puts one back as the draft, where publishing is the next step. */
+  restoreDocumentVersion(
+    projectId: string,
+    dataset: string,
+    documentId: string,
+    version: number,
+  ): Promise<MutationResponse> {
+    return documents.restoreDocumentVersion(this.context, projectId, dataset, documentId, version);
   }
 
   // ── Assets ─────────────────────────────────────────────────────────────────

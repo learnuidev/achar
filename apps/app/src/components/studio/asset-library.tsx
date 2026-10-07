@@ -72,7 +72,7 @@ export function AssetLibraryProvider({
       if (!reference) return null;
       const direct = byReference.get(reference);
       if (direct) return direct;
-      const bare = reference.replace(/^(image|file)-/, '').split('-')[0];
+      const bare = reference.replace(/^(image|video|file)-/, '').split('-')[0];
       return (bare && byReference.get(bare)) || null;
     },
     [byReference],

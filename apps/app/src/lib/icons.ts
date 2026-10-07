@@ -18,6 +18,7 @@ import {
   CodeIcon,
   CreditCardIcon,
   FileTextIcon,
+  FilmIcon,
   FolderIcon,
   GlobeIcon,
   HashIcon,
@@ -38,6 +39,7 @@ import {
   StarIcon,
   TagIcon,
   TypeIcon,
+  VideoIcon,
   UserIcon,
   UsersIcon,
   ZapIcon,
@@ -77,6 +79,8 @@ const ICONS: Record<string, LucideIcon> = {
   type: TypeIcon,
   user: UserIcon,
   users: UsersIcon,
+  video: VideoIcon,
+  film: FilmIcon,
   zap: ZapIcon,
 };
 

@@ -84,11 +84,23 @@ function FieldValue({
     return <PortableTextRenderer value={value as PortableTextValue} />;
   }
 
-  if (field === 'image' || field === 'file') {
+  if (field === 'image' || field === 'video' || field === 'file') {
     const reference = referenceOf(value);
     const url = urlFor(reference);
     if (!url) {
       return <p className="text-sm text-muted-foreground">Nothing chosen.</p>;
+    }
+    if (field === 'video') {
+      // Playable in the preview, because the question a preview answers about a
+      // video is "is this the right clip", and a thumbnail does not answer it.
+      return (
+        <video
+          src={url}
+          controls
+          preload="metadata"
+          className="max-h-64 w-full rounded-lg border border-border bg-black"
+        />
+      );
     }
     return field === 'image' ? (
       // eslint-disable-next-line @next/next/no-img-element -- the CDN host is not in `remotePatterns`.

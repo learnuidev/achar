@@ -53,6 +53,7 @@ import {
 } from './dynamo';
 import { HttpError } from './http';
 import { rev as newRev, ulid } from './ids';
+import { forgetVersions, getVersion, snapshotVersion, type SnapshotInput } from './versions';
 
 export const DRAFT_PREFIX = 'drafts.';
 
@@ -446,7 +447,19 @@ interface RowSeed {
 }
 
 function buildRow(seed: RowSeed): DocumentRow {
-  const { _id: _ignoredId, _type: ignoredType, ...fields } = seed.fields;
+  // `_draft`, `_published` and `_editable` are what a *read* answers with rather
+  // than what a row holds, so a document that came out of a read carries them —
+  // and a restored version is exactly that, since a snapshot is the document as a
+  // client saw it. Passing them on would store a draft row claiming to be
+  // published, which nothing reads today and which nothing should have to know.
+  const {
+    _id: _ignoredId,
+    _type: ignoredType,
+    _draft: _ignoredDraft,
+    _published: _ignoredPublished,
+    _editable: _ignoredEditable,
+    ...fields
+  } = seed.fields;
   const type = typeof ignoredType === 'string' ? ignoredType : '';
   if (!type) throw new HttpError(400, 'BAD_REQUEST', '_type is required', { field: '_type' });
 
@@ -481,11 +494,25 @@ export interface MutationContext {
   projectId: string;
   dataset: string;
   /**
-   * Runs over a document that is being written whole. A patch is exempt — see
-   * `applyPatch` — because refusing an edit to one field over a schema
-   * complaint about another would make an old document uneditable.
+   * Who is publishing, for the version a publish leaves behind.
+   *
+   * Optional because a mutation is not always a person — a seed, a script — and a
+   * version that does not know who wrote it is still a version. Absent rather than
+   * invented: a `publishedBy` of `'unknown'` would be a name nothing can resolve.
    */
-  validate?: (document: AcharDocument) => void;
+  publishedBy?: string | null;
+  /**
+   * Runs over a document that is being written whole, with the stage it is being
+   * written at. A patch is exempt — see `applyPatch` — because refusing an edit to
+   * one field over a schema complaint about another would make an old document
+   * uneditable.
+   *
+   * The stage is not decoration: a **draft** may be missing a required field, and a
+   * **published** document may not. That is the whole difference between the two
+   * rows, and the reason this is a parameter rather than a flag on the context —
+   * the same batch can publish one document and draft another.
+   */
+  validate?: (document: AcharDocument, stage: 'draft' | 'published') => void;
 }
 
 export interface MutationInput extends MutationContext {
@@ -587,13 +614,19 @@ export async function applyMutations(input: MutationInput): Promise<MutationsApp
   let created = 0;
   let deleted = 0;
 
+  const effects: Effect[] = [];
+
   try {
     for (const mutation of input.mutations) {
       const applied = await applyOne(mutation, input, working);
       results.push(applied.result);
       if (applied.created) created += 1;
       if (applied.deleted) deleted += 1;
-      if (!input.atomic) await emit(working, transactionId);
+      if (applied.effects) effects.push(...applied.effects);
+      if (!input.atomic) {
+        await emit(working, transactionId);
+        await settle(input, effects.splice(0));
+      }
     }
   } catch (error) {
     if (error instanceof HttpError && !input.atomic) {
@@ -606,7 +639,32 @@ export async function applyMutations(input: MutationInput): Promise<MutationsApp
   }
 
   if (input.atomic) await emit(working, transactionId);
+  await settle(input, effects);
+
   return { results, transactionId, created, deleted };
+}
+
+/**
+ * The writes that follow the rows: versions recorded, and history dropped.
+ *
+ * Failures here are raised, not swallowed — a publish whose version could not be
+ * written has to be knowable, and the next publish will number itself from
+ * whatever history exists, so a gap is a gap rather than a corruption.
+ */
+async function settle(context: MutationContext, effects: Effect[]): Promise<void> {
+  for (const effect of effects) {
+    if (effect.kind === 'snapshot') {
+      await snapshotVersion({
+        projectId: context.projectId,
+        dataset: context.dataset,
+        documentId: effect.documentId,
+        document: effect.document,
+        publishedBy: context.publishedBy ?? null,
+      } satisfies SnapshotInput);
+      continue;
+    }
+    await forgetVersions(context.projectId, context.dataset, effect.documentId);
+  }
 }
 
 interface Applied {
@@ -615,7 +673,21 @@ interface Applied {
   created?: boolean;
   /** A document that exists no more. */
   deleted?: boolean;
+  /**
+   * What has to be written elsewhere once the rows themselves have landed.
+   *
+   * History lives in its own table, so it cannot be part of the same write, and
+   * the order is deliberate: the document is written first and the note about it
+   * second. A crash in between loses the record of a publish, which is smaller
+   * than a publish that did not happen because its history could not be written.
+   */
+  effects?: Effect[];
 }
+
+/** A write that follows the rows: a version recorded, or a deleted document's history dropped. */
+type Effect =
+  | { kind: 'snapshot'; documentId: string; document: AcharDocument }
+  | { kind: 'forget'; documentId: string };
 
 async function applyOne(
   mutation: DocumentMutation,
@@ -631,7 +703,7 @@ async function applyOne(
     if (rows.draft || rows.published) throw conflict(`Document ${id} already exists`, id);
 
     const row = buildRow({ ...context, id, draft: true, fields: body as Record<string, unknown> });
-    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }));
+    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
     return { result: { documentId: id, operation: 'create', rev: row._rev }, created: true };
   }
@@ -651,7 +723,7 @@ async function applyOne(
       // what a studio sorts by and what it draws as "created".
       createdAt: rows.draft?._createdAt ?? rows.published?._createdAt,
     });
-    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }));
+    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
     return {
       result: { documentId: id, operation: 'replace', rev: row._rev },
@@ -679,7 +751,7 @@ async function applyOne(
       fields: body as Record<string, unknown>,
       createdAt: rows.published?._createdAt,
     });
-    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }));
+    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
     return { result: { documentId: id, operation: 'create', rev: row._rev }, created: true };
   }
@@ -713,7 +785,13 @@ async function applyOne(
     // has a draft, or half-deleted in a way no screen can explain.
     clear(working, keyOf(context.projectId, context.dataset, true, id));
     clear(working, keyOf(context.projectId, context.dataset, false, id));
-    return { result: { documentId: id, operation: 'delete', rev: removed._rev }, deleted: true };
+    return {
+      result: { documentId: id, operation: 'delete', rev: removed._rev },
+      deleted: true,
+      // A snapshot of a document that no longer exists is a version nothing can
+      // be restored into, so the history goes with the document.
+      effects: [{ kind: 'forget', documentId: id }],
+    };
   }
 
   if (mutation.publish) {
@@ -732,11 +810,24 @@ async function applyOne(
       fields: rows.draft as unknown as Record<string, unknown>,
       createdAt: rows.published?._createdAt ?? rows.draft._createdAt,
     });
-    context.validate?.(toApiDocument(published, { draft: false, published: true, editable: true }));
+    // The one write where a document has to be whole: this is the row readers get.
+    context.validate?.(
+      toApiDocument(published, { draft: false, published: true, editable: true }),
+      'published',
+    );
 
     stage(working, published);
     clear(working, keyOf(context.projectId, context.dataset, true, id));
-    return { result: { documentId: id, operation: 'publish', rev: published._rev } };
+    return {
+      result: { documentId: id, operation: 'publish', rev: published._rev },
+      effects: [
+        {
+          kind: 'snapshot',
+          documentId: id,
+          document: toApiDocument(published, { draft: false, published: true, editable: true }),
+        },
+      ],
+    };
   }
 
   if (mutation.unpublish) {
@@ -763,10 +854,48 @@ async function applyOne(
     return { result: { documentId: id, operation: 'unpublish', rev: rows.published._rev } };
   }
 
+  if (mutation.restore) {
+    const id = publishedIdOf(mutation.restore.id);
+    const version = await getVersion(context.projectId, context.dataset, id, mutation.restore.version);
+    if (!version) {
+      throw new HttpError(
+        404,
+        'VERSION_NOT_FOUND',
+        `Document ${id} has no version ${mutation.restore.version}`,
+        { documentId: id, version: mutation.restore.version },
+      );
+    }
+
+    const rows = await currentRows(context, working, id);
+    const row = buildRow({
+      ...context,
+      id,
+      draft: true,
+      // A snapshot is a document, so it can be handed back to `buildRow` as the
+      // fields of a row — which is what keeps a restore on the same path as every
+      // other write: one validator, one revision, one conflict rule. The internal
+      // attributes the snapshot also carries are dropped or overwritten there.
+      fields: version.document as Record<string, unknown>,
+      // The document was created when it was created; a version is not a new one.
+      createdAt: rows.draft?._createdAt ?? rows.published?._createdAt ?? version.document._createdAt,
+    });
+
+    context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
+    stage(working, row);
+
+    // Into the draft, never onto the published row: what a site serves is what
+    // somebody chose to publish, and reading a version must not be a way to change
+    // production. `publish` is the next step, and it is the one that changes it.
+    return {
+      result: { documentId: id, operation: 'restore', rev: row._rev },
+      created: !rows.draft && !rows.published,
+    };
+  }
+
   throw new HttpError(
     400,
     'BAD_REQUEST',
-    'A mutation must name exactly one of create, createOrReplace, createIfNotExists, patch, delete, publish or unpublish',
+    'A mutation must name exactly one of create, createOrReplace, createIfNotExists, patch, delete, publish, unpublish or restore',
   );
 }
 

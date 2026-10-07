@@ -176,15 +176,24 @@ export function documentType(schema: DatasetSchema, name: string): SchemaType | 
 }
 
 /**
- * Checks a document that is being written whole against its type.
+ * Checks a document that is being written against its type.
  *
  * A document of a type the schema does not declare is refused, because a
  * document nothing can render is not content — it is a row that will appear in
  * no list and no query a client can write. The fields are checked by the schema
  * package, which is the same code the studio's form runs, so the two cannot
- * disagree about what is missing.
+ * disagree about what is wrong.
+ *
+ * **`requireComplete` is the caller's, and it is the draft/publish line.** A
+ * draft may be missing a required field — that is what a draft is for — so the
+ * write path passes `false` and publishing passes `true`. Shapes are checked
+ * either way: a number where the schema says string is a mistake in a draft too.
  */
-export function assertValidDocument(schema: DatasetSchema, document: Record<string, unknown>): void {
+export function assertValidDocument(
+  schema: DatasetSchema,
+  document: Record<string, unknown>,
+  options: { requireComplete?: boolean } = {},
+): void {
   const name = typeof document._type === 'string' ? document._type : '';
   const type = documentType(schema, name);
   if (!type) {
@@ -194,7 +203,7 @@ export function assertValidDocument(schema: DatasetSchema, document: Record<stri
     });
   }
 
-  const issues: SchemaIssue[] = validateDocument(type, document);
+  const issues: SchemaIssue[] = validateDocument(type, document, options);
   if (issues.length > 0) {
     throw new HttpError(400, 'VALIDATION_FAILED', `${type.title} is not valid`, { issues });
   }

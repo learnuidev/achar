@@ -75,6 +75,7 @@ export function FieldControl(props: FieldControlProps) {
     case 'email':
       return <ScalarControl {...props} type="email" invalid={invalid} />;
     case 'image':
+    case 'video':
     case 'file':
       return <AssetField {...props} />;
     case 'reference':

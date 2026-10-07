@@ -62,6 +62,7 @@ export const TABLE_IDS = [
   'DatasetsTable',
   'SchemasTable',
   'DocumentsTable',
+  'VersionsTable',
   'AssetsTable',
   'TokensTable',
   'WebhooksTable',
@@ -77,6 +78,7 @@ const TABLE_NAMES: Record<TableId, () => string> = {
   DatasetsTable: () => env.datasetsTable,
   SchemasTable: () => env.schemasTable,
   DocumentsTable: () => env.documentsTable,
+  VersionsTable: () => env.versionsTable,
   AssetsTable: () => env.assetsTable,
   TokensTable: () => env.tokensTable,
   WebhooksTable: () => env.webhooksTable,
@@ -112,6 +114,7 @@ export const Keys = {
    * holding every version of every document.
    */
   document: (documentKey: string): Key => ({ documentKey }),
+  version: (datasetKey: string, versionKey: string): Key => ({ datasetKey, versionKey }),
   asset: (projectId: string, assetKey: string): Key => ({ projectId, assetKey }),
   token: (tokenId: string): Key => ({ tokenId }),
   webhook: (projectId: string, webhookId: string): Key => ({ projectId, webhookId }),

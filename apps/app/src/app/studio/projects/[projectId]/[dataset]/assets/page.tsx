@@ -1,7 +1,14 @@
 'use client';
 
 import { use, useState } from 'react';
-import { ExternalLinkIcon, FileIcon, ImageIcon, SearchIcon, Trash2Icon } from 'lucide-react';
+import {
+  ExternalLinkIcon,
+  FileIcon,
+  ImageIcon,
+  SearchIcon,
+  Trash2Icon,
+  VideoIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { Asset } from '@achar/types';
 import {
@@ -26,9 +33,9 @@ import { errorMessage } from '@/lib/errors';
 import { formatBytes, plural, relativeTime } from '@/lib/format';
 
 /**
- * The library: every image and file the dataset holds.
+ * The library: every image, video and file the dataset holds.
  *
- * A document never carries the bytes of an image, only a reference to a row in
+ * A document never carries the bytes of an asset, only a reference to a row in
  * here, and every preview in the studio resolves that reference through this same
  * list — which is why the page is drawn from `useAssetLibrary` rather than from a
  * read of its own. An upload made here is in the grid before the next read of the
@@ -55,6 +62,7 @@ export default function AssetsPage({
   const [pending, setPending] = useState(false);
 
   const images = library.assets.filter((asset) => asset.kind === 'image');
+  const videos = library.assets.filter((asset) => asset.kind === 'video');
   const files = library.assets.filter((asset) => asset.kind === 'file');
   const bytes = library.assets.reduce((sum, asset) => sum + asset.size, 0);
 
@@ -88,7 +96,7 @@ export default function AssetsPage({
         title="Asset library"
         description={
           <>
-            Every image and file this dataset holds. A document stores a reference, never the bytes,
+            Every image, video and file this dataset holds. A document stores a reference, never the bytes,
             and this library is what resolves that reference to a URL — so what is here is what every
             preview, and every reader of the published content, is drawn from.
           </>
@@ -97,6 +105,7 @@ export default function AssetsPage({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <StatBlock label="Images" value={images.length} hint="drawn as a grid" />
+        <StatBlock label="Videos" value={videos.length} hint="played in place" />
         <StatBlock label="Files" value={files.length} hint="drawn as a list" />
         <StatBlock label="Total size" value={formatBytes(bytes)} hint="of the stored objects" />
       </div>
@@ -154,6 +163,11 @@ export default function AssetsPage({
               Images
               <span className="text-muted-foreground tabular-nums">{images.length}</span>
             </TabsTrigger>
+            <TabsTrigger value="videos">
+              <VideoIcon className="size-4" />
+              Videos
+              <span className="text-muted-foreground tabular-nums">{videos.length}</span>
+            </TabsTrigger>
             <TabsTrigger value="files">
               <FileIcon className="size-4" />
               Files
@@ -167,6 +181,16 @@ export default function AssetsPage({
               searching={needle !== ''}
               canEdit={canEdit}
               onDelete={setDeleting}
+            />
+          </TabsContent>
+
+          <TabsContent value="videos">
+            <AssetGrid
+              assets={shown(videos)}
+              searching={needle !== ''}
+              canEdit={canEdit}
+              onDelete={setDeleting}
+              kind="video"
             />
           </TabsContent>
 
@@ -210,27 +234,44 @@ export default function AssetsPage({
   );
 }
 
-/** The images, as the tiles a person recognises a picture by. */
+/**
+ * The images, and the videos, as the tiles a person recognises one by.
+ *
+ * One grid for both because they are one shape of thing — a picture you look at,
+ * with a name under it — and the difference is only what draws it: an `img` for a
+ * still, a `video` for a clip. The empty state is where the two part company,
+ * because "no images yet" and "no videos yet" are different sentences.
+ */
 function AssetGrid({
   assets,
   searching,
   canEdit,
   onDelete,
+  kind = 'image',
 }: {
   assets: Asset[];
   searching: boolean;
   canEdit: boolean;
   onDelete: (asset: Asset) => void;
+  kind?: 'image' | 'video';
 }) {
   if (assets.length === 0) {
     return (
       <EmptyState
-        icon={<SearchIcon className="size-5" />}
-        title={searching ? 'No image matches that' : 'No images yet'}
+        icon={kind === 'video' ? <VideoIcon className="size-5" /> : <SearchIcon className="size-5" />}
+        title={
+          searching
+            ? `No ${kind} matches that`
+            : kind === 'video'
+              ? 'No videos yet'
+              : 'No images yet'
+        }
         description={
           searching
-            ? 'Search reads filenames only — a picture is called whatever it was called when it was uploaded.'
-            : 'Images are the assets a document draws. A file uploaded as anything but an image is listed under Files.'
+            ? 'Search reads filenames only — an asset is called whatever it was called when it was uploaded.'
+            : kind === 'video'
+              ? 'A video is uploaded the same way an image is, and a document points at it with a Video field. Nothing here is transcoded: the file you upload is the file that is served.'
+              : 'Images are the assets a document draws. A file uploaded as anything but an image is listed under Files.'
         }
       />
     );
@@ -240,13 +281,22 @@ function AssetGrid({
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {assets.map((asset) => (
         <Card key={asset.assetId} className="overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element -- the CDN host is not in `remotePatterns`, and the URL is already transformed. */}
-          <img
-            src={asset.url}
-            alt={asset.filename}
-            loading="lazy"
-            className="h-40 w-full border-b border-border bg-muted object-cover"
-          />
+          {asset.kind === 'video' ? (
+            <video
+              src={asset.url}
+              preload="metadata"
+              controls
+              className="h-40 w-full border-b border-border bg-black object-cover"
+            />
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element -- the CDN host is not in `remotePatterns`, and the URL is already transformed. */
+            <img
+              src={asset.url}
+              alt={asset.filename}
+              loading="lazy"
+              className="h-40 w-full border-b border-border bg-muted object-cover"
+            />
+          )}
           <CardContent className="space-y-2 p-3">
             <p className="truncate text-sm font-medium" title={asset.filename}>
               {asset.filename}
@@ -287,7 +337,7 @@ function AssetList({
         description={
           searching
             ? 'Search reads filenames only — a file is called whatever it was called when it was uploaded.'
-            : 'Anything that is not an image — a PDF, a font, a video — is a file, and a document points at it the same way it points at a picture.'
+            : 'Anything that is not an image or a video — a PDF, a font, an archive — is a file, and a document points at it the same way it points at a picture.'
         }
       />
     );

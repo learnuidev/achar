@@ -234,8 +234,8 @@ export function PortableTextEditor({
       <p className="text-xs text-muted-foreground">
         Each line is a block. <span className="font-mono">⌘B</span> bold,{' '}
         <span className="font-mono">⌘I</span> italic, <span className="font-mono">⌘E</span> code,{' '}
-        <span className="font-mono">Enter</span> a new line — and every line is saved as part of the
-        draft as you type.
+        <span className="font-mono">Enter</span> a new line — every line becomes part of the draft
+        when the document is saved.
       </p>
 
       <Dialog open={linkFor !== null} onOpenChange={(open) => !open && setLinkFor(null)}>

@@ -31,6 +31,7 @@ export interface AcharEnv {
   readonly datasetsTable: string;
   readonly schemasTable: string;
   readonly documentsTable: string;
+  readonly versionsTable: string;
   readonly assetsTable: string;
   readonly tokensTable: string;
   readonly webhooksTable: string;
@@ -72,6 +73,9 @@ export const env: AcharEnv = {
   },
   get documentsTable() {
     return read('DOCUMENTS_TABLE');
+  },
+  get versionsTable() {
+    return read('VERSIONS_TABLE');
   },
   get assetsTable() {
     return read('ASSETS_TABLE');

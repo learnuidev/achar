@@ -110,6 +110,10 @@ export function toAsset(record: AssetRecord): Asset {
  * and a reference that says what it is needs no lookup to be useful. The
  * dimensions are here rather than only on the row so that a reader can lay a
  * page out without a second request.
+ *
+ * A video carries them the same way, and they are the frame size: a page that
+ * knows them can hold the space for a player before its first frame arrives,
+ * which is the difference between text that stays put and text that jumps.
  */
 export function referenceFor(
   kind: AssetKind,
@@ -118,8 +122,8 @@ export function referenceFor(
   dimensions?: { width?: number | null; height?: number | null },
 ): string {
   const extension = extensionOf(filename);
-  if (kind === 'image' && dimensions?.width && dimensions.height) {
-    return `image-${assetId}-${dimensions.width}x${dimensions.height}-${extension}`;
+  if (dimensions?.width && dimensions.height) {
+    return `${kind}-${assetId}-${dimensions.width}x${dimensions.height}-${extension}`;
   }
   return `${kind}-${assetId}-${extension}`;
 }
@@ -159,8 +163,10 @@ export function s3KeyOf(projectId: string, dataset: string, assetId: string, fil
 }
 
 export function requireAssetKind(value: unknown): AssetKind {
-  if (value !== 'image' && value !== 'file') {
-    throw new HttpError(400, 'BAD_REQUEST', 'kind must be `image` or `file`', { field: 'kind' });
+  if (value !== 'image' && value !== 'video' && value !== 'file') {
+    throw new HttpError(400, 'BAD_REQUEST', 'kind must be `image`, `video` or `file`', {
+      field: 'kind',
+    });
   }
   return value;
 }

@@ -39,7 +39,7 @@ import { defineField } from '../dsl';
  * | `Date` | a moment — what a publish time is |
  * | `date` | a day, with no time in it |
  * | `Slug`, `Url`, `Email` | a string that is checked |
- * | `Image`, `File` | an asset |
+ * | `Image`, `Video`, `File` | an asset |
  * | `PortableText` | rich text |
  * | `'a' \| 'b'` | one of those, as a picker |
  * | `{ … }` | a nested object |
@@ -92,6 +92,7 @@ const SCALARS: Record<string, SchemaFieldType> = {
   uri: 'url',
   email: 'email',
   image: 'image',
+  video: 'video',
   file: 'file',
   portabletext: 'portableText',
 };
@@ -125,6 +126,7 @@ const SCALAR_NAMES: Record<SchemaFieldType, string> = {
   url: 'Url',
   email: 'Email',
   image: 'Image',
+  video: 'Video',
   file: 'File',
   portableText: 'PortableText',
   reference: 'Reference',

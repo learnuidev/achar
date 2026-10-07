@@ -12,30 +12,35 @@ import { DocumentForm } from '@/components/editor/document-form';
 import { DocumentPreview } from '@/components/editor/document-preview';
 import { InspectorPanel } from '@/components/editor/inspector-panel';
 import { PublishBar, type SaveState } from '@/components/editor/publish-bar';
+import { DocumentHistoryDialog } from '@/components/studio/document-history-dialog';
 import { useDocumentPair } from '@/hooks/use-documents';
 import { errorMessage } from '@/lib/errors';
 import { draftIdOf, routes } from '@/lib/routes';
-
-/** How long typing pauses before the draft is written. */
-const AUTOSAVE_MS = 1000;
 
 /**
  * The document editor, where the two halves of the model meet.
  *
  * **Drafts and publishing.** A document is two rows: `drafts.<id>` and `<id>`.
- * Every keystroke here patches the *draft* — debounced, so a paragraph is one
- * write rather than two hundred — and the published row is only ever touched by
- * the Publish button, which calls `publishDocument` and moves the draft onto the
+ * Saving patches the *draft*; the published row is only ever touched by the
+ * Publish button, which calls `publishDocument` and moves the draft onto the
  * published id. `Unpublish` takes the published row away and leaves the draft,
  * which is where it goes. The consequence is the whole design: a reader keeps
  * getting what was published while somebody rewrites it, and nothing an editor
  * types can reach a reader by accident.
  *
- * **Validation never blocks a draft.** `validateDocument` runs on every value
- * and the issues are listed in the panel and marked on the fields, but the save
- * goes through anyway — a draft is a place for a half-written document, and
- * refusing to save one is refusing the thing drafts are for. Publishing is the
- * step that warns, because publishing is the step that has consequences.
+ * **Nothing is written until somebody says so.** There was a debounce here that
+ * wrote the draft a second after typing stopped, and it is gone: a save is the
+ * Save draft button, ⌘S, or Publish — which writes the draft first, because
+ * publishing reads the row the API holds and a button that published the version
+ * from before the last sentence would be publishing something nobody saw. So the
+ * bar's "Unsaved changes" means what it says, and the browser is given a chance to
+ * ask before a tab closes on unsaved work.
+ *
+ * **Validation never blocks a draft.** `validateDocument` runs on every value and
+ * the issues are listed in the panel and marked on the fields, but a save goes
+ * through anyway — a draft is a place for a half-written document, and refusing to
+ * save one is refusing the thing drafts are for. Publishing is the step that
+ * warns, because publishing is the step that has consequences.
  *
  * The bar at the top says which version is on screen, whether it is saved, and
  * what a reader would currently get. That bar is the product: everything else
@@ -133,18 +138,32 @@ export function DocumentEditor({
     }
   }, [canEdit, client, projectId, dataset, draftId, type.name, value, pair.refresh]);
 
-  // Held in refs so the debounce and the keyboard shortcuts always call the
-  // newest closure without re-registering listeners on every keystroke.
+  // Held in a ref so the keyboard shortcuts — and the publish that saves first —
+  // always call the newest closure without re-registering listeners.
   const saveRef = useRef(saveDraft);
   saveRef.current = saveDraft;
 
+  /**
+   * A last word before the tab goes, when there is something unwritten.
+   *
+   * Nothing here saves by itself any more, so the one thing that can lose work is
+   * closing the page with the form dirty — and this is the browser's own warning
+   * rather than a dialog of ours, because by the time it fires the decision is
+   * already the browser's. It is **not** a save: dismissing it keeps the work
+   * unsaved, which is the point.
+   *
+   * It cannot see a navigation inside the studio — a rail link is a client-side
+   * route change, and the browser never asks about those. The bar's own
+   * "Unsaved changes" is what says so before somebody clicks away.
+   */
   useEffect(() => {
-    if (!dirty || !canEdit) return;
-    const timer = setTimeout(() => {
-      void saveRef.current();
-    }, AUTOSAVE_MS);
-    return () => clearTimeout(timer);
-  }, [dirty, value, canEdit]);
+    if (!dirty) return;
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   const publishRef = useRef<() => void>(() => undefined);
 
@@ -264,6 +283,23 @@ export function DocumentEditor({
           canEdit={canEdit}
           busy={busy}
           previewOpen={previewOpen}
+          history={
+            // Restoring writes the draft, so the editor drops whatever it was
+            // holding and reads the restored row: the refill effect only runs for
+            // a form that is not dirty, which is why `dirty` is cleared first.
+            <DocumentHistoryDialog
+              projectId={projectId}
+              dataset={dataset}
+              documentId={documentId}
+              type={type}
+              canEdit={canEdit}
+              onRestored={() => {
+                setDirty(false);
+                setSaveState('clean');
+                pair.refresh();
+              }}
+            />
+          }
           onTogglePreview={() => setPreviewOpen((open) => !open)}
           onSave={() => void saveRef.current()}
           onPublish={requestPublish}

@@ -1,4 +1,4 @@
-import type { Asset } from '@achar/types';
+import type { Asset, AssetKind } from '@achar/types';
 
 import type { AcharClient } from './api';
 
@@ -24,9 +24,10 @@ export async function uploadAsset(
     contentType,
     // The route refuses a ticket that does not name a kind, and the content type
     // is where the answer is: the browser already knows whether the bytes it is
-    // about to send are an image, and an octet stream is the case where it does
-    // not, which is a file.
-    kind: contentType.startsWith('image/') ? 'image' : 'file',
+    // about to send are an image or a video, and an octet stream — or a type this
+    // browser does not know — falls back to the extension, which is the one other
+    // thing a name carries.
+    kind: kindOf(contentType, nameOf(file)),
     size: file.size,
   });
 
@@ -37,6 +38,27 @@ export async function uploadAsset(
     ...(await dimensionsOf(file)),
   });
 }
+
+/**
+ * Which part of the library a file belongs in.
+ *
+ * The MIME type first, because it is what the browser actually knows, and the
+ * extension second, because a `.mov` dragged out of a folder on some systems
+ * arrives with no type at all — and filing a video as a plain file would put it
+ * somewhere the video field cannot find it.
+ */
+function kindOf(contentType: string, filename: string): AssetKind {
+  if (contentType.startsWith('image/')) return 'image';
+  if (contentType.startsWith('video/')) return 'video';
+
+  const extension = /\.([A-Za-z0-9]{1,8})$/.exec(filename)?.[1]?.toLowerCase() ?? '';
+  if (VIDEO_EXTENSIONS.has(extension)) return 'video';
+  if (IMAGE_EXTENSIONS.has(extension)) return 'image';
+  return 'file';
+}
+
+const VIDEO_EXTENSIONS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'bmp', 'tiff']);
 
 /**
  * The bytes, straight to S3.
@@ -82,7 +104,13 @@ function putBytes(
  * `createImageBitmap`, simply commits without them.
  */
 async function dimensionsOf(file: File | Blob): Promise<{ width?: number; height?: number }> {
-  if (!file.type.startsWith('image/') || typeof createImageBitmap !== 'function') return {};
+  if (file.type.startsWith('image/')) return imageDimensions(file);
+  if (file.type.startsWith('video/')) return videoDimensions(file);
+  return {};
+}
+
+async function imageDimensions(file: File | Blob): Promise<{ width?: number; height?: number }> {
+  if (typeof createImageBitmap !== 'function') return {};
   try {
     const bitmap = await createImageBitmap(file);
     const size = { width: bitmap.width, height: bitmap.height };
@@ -91,6 +119,40 @@ async function dimensionsOf(file: File | Blob): Promise<{ width?: number; height
   } catch {
     return {};
   }
+}
+
+/**
+ * A video's frame size, read from its own metadata.
+ *
+ * The browser has to decode the header to know this, which it does for a `<video>`
+ * once it has enough of the file — so this waits for `loadedmetadata` and never for
+ * a frame. The object URL is revoked whether it worked or not: a file held by a URL
+ * nobody releases is a file the page keeps in memory for as long as it is open, and
+ * a forty-minute upload is not a small thing to leak.
+ */
+function videoDimensions(file: File | Blob): Promise<{ width?: number; height?: number }> {
+  return new Promise((resolve) => {
+    if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
+      resolve({});
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+
+    const finish = (size: { width?: number; height?: number }): void => {
+      URL.revokeObjectURL(url);
+      video.removeAttribute('src');
+      resolve(size);
+    };
+
+    video.onloadedmetadata = () => finish({ width: video.videoWidth, height: video.videoHeight });
+    // A codec this browser cannot open is not a reason to refuse the upload: the
+    // bytes are still worth keeping, and the dimensions are only a nicety.
+    video.onerror = () => finish({});
+    video.src = url;
+  });
 }
 
 function nameOf(file: File | Blob): string {

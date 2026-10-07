@@ -100,8 +100,11 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
 - `defaultSchema(): DatasetSchema` — **the content model the public site is
   rendered from.** Every type listed below. The seed writes it, the studio edits
   it, `apps/app` renders it, and `apps/demo` queries it.
-- `validateDocument(type: SchemaType, value: unknown): SchemaIssue[]` where
-  `SchemaIssue = { path: string; message: string }`.
+- `validateDocument(type: SchemaType, value: unknown, options?: { requireComplete?: boolean }): SchemaIssue[]`
+  where `SchemaIssue = { path: string; message: string }`. `requireComplete` is
+  the draft/publish line: a **draft** may be missing a required field — that is
+  what a draft is for — while a **published** document may not. Shapes are checked
+  either way, so a number where the schema says string is a mistake in a draft too.
 - `initialDocument(type: SchemaType): Record<string, unknown>` — a new document
   with every `initialValue` applied and every required string an empty string.
 - `previewOf(type: SchemaType, document): { title: string; subtitle?: string; mediaField?: string }`
@@ -145,7 +148,11 @@ await client.query<Post[]>('production', { query: '*[_type == "post"] | order(pu
 - `new AcharClient({ apiUrl: string; token?: string | null })`
 - `AcharApiError` — carries `status` and the parsed `ApiErrorBody`.
 - `uploadAsset(client, projectId, dataset, file: File, onProgress?)` — reserves the
-  row, PUTs the bytes to S3, commits the metadata. Returns `Asset`.
+  row, PUTs the bytes to S3, commits the metadata. Returns `Asset`. The bytes never
+  pass through a handler, which is what makes a large video an ordinary upload: the
+  kind is read from the browser's content type (and from the extension when there is
+  none), so `image` and `video` are two halves of one library and `file` is
+  everything else.
 - `imageUrl(asset, { width, height, quality })` — a CDN URL with transform params.
 - Methods, all of them: `info`, `me`, `myInvitations`, `listProjects`,
   `createProject`, `getProject`, `updateProject`, `deleteProject`, `listMembers`,
@@ -153,7 +160,8 @@ await client.query<Post[]>('production', { query: '*[_type == "post"] | order(pu
   `acceptInvitation`, `listDatasets`, `createDataset`, `getDataset`,
   `deleteDataset`, `getSchema`, `putSchema`, `query`, `listDocuments`,
   `getDocument`, `mutate`, `publishDocument`, `unpublishDocument`,
-  `discardDraft`, `listAssets`, `createUploadTicket`, `commitAsset`, `deleteAsset`,
+  `discardDraft`, `listDocumentVersions`, `getDocumentVersion`,
+  `restoreDocumentVersion`, `listAssets`, `createUploadTicket`, `commitAsset`, `deleteAsset`,
   `listTokens`, `createToken`, `revokeToken`, `listWebhooks`, `createWebhook`,
   `updateWebhook`, `deleteWebhook`, `listDeliveries`, `exportDataset`.
 
@@ -264,11 +272,20 @@ the handler never sees an unauthenticated request at all.
 | GET | `/v1/data/query/{p}/{d}` | readers | **GROQ.** `?query=&params=&perspective=` |
 | GET | `/v1/data/list/{p}/{d}` | readers | Documents of one type, paged, for a studio's list |
 | GET | `/v1/data/doc/{p}/{d}/{docId}` | readers | One document, at one perspective |
-| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations |
+| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore` |
+| GET | `/v1/data/doc/{p}/{d}/{docId}/versions` | readers | Every time the document was published |
+| GET | `/v1/data/doc/{p}/{d}/{docId}/versions/{version}` | readers | One version, as it was |
 | GET | `/v1/assets/{p}/{d}` | readers | The asset library |
 | POST | `/v1/assets/{p}/{d}/upload-url` | editors | Reserve a row and presign a PUT |
 | POST | `/v1/assets/{p}/{d}` | editors | Commit the metadata after the PUT |
 | DELETE | `/v1/assets/{p}/{d}/{assetId}` | editors | Delete the object and the row |
+
+Assets are one table and three kinds — `image`, `video`, `file` — and a document
+points at any of them with a reference string rather than with bytes:
+`image-<assetId>-<w>x<h>-<ext>`, `video-<assetId>-<w>x<h>-<ext>`, `file-<assetId>-<ext>`.
+A video's dimensions are its frame size, kept for the same reason an image's are:
+a page can hold the space before the first frame arrives. Nothing is transcoded —
+the file that was uploaded is the file the CDN serves.
 
 ### GROQ
 
@@ -313,6 +330,7 @@ cdk deploy --all --context stage=dev
 | `DatasetsTable` | `projectId` + `datasetName` | visibility, counts |
 | `SchemasTable` | `projectId` + `datasetKey` | the schema, and its revision |
 | `DocumentsTable` | `documentKey` (`{projectId}#{dataset}#{id}`) | the document; GSIs `TypeIndex` (`typeKey` + `_updatedAt`), `UpdatedIndex` (`datasetKey` + `_updatedAt`) |
+| `VersionsTable` | `datasetKey` + `versionKey` (`{documentId}#v{version}`) | one published version each, written once — its policy grants no `UpdateItem` |
 | `AssetsTable` | `projectId` + `assetKey` | metadata; GSI `DatasetCreatedIndex` |
 | `TokensTable` | `tokenId` | hashed secret, role, dataset; GSI `ProjectIndex` |
 | `WebhooksTable` | `projectId` + `webhookId` | url, events, filter, projection |
@@ -323,6 +341,12 @@ cdk deploy --all --context stage=dev
 `{projectId}#{dataset}#{documentId}`, so a dataset's content is one `begins_with`
 query, and the draft is simply the row whose id begins `drafts.` — the pair the
 whole draft/publish model rests on.
+
+**History is its own table**, because a row is replaced when it is published and
+the previous revision is then gone: `VersionsTable` keeps the document as it was
+at each publish, numbered `v1`, `v2`, … per document. A version is written once
+and never edited — the table's IAM has no `UpdateItem` — and restoring one writes
+the *draft*, so reading history is never a way to change what a site serves.
 
 ### The route table
 

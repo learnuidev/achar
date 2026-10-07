@@ -46,6 +46,7 @@ export function PublishBar({
   canEdit,
   busy,
   previewOpen,
+  history,
   onTogglePreview,
   onSave,
   onPublish,
@@ -65,6 +66,8 @@ export function PublishBar({
   canEdit: boolean;
   busy: boolean;
   previewOpen: boolean;
+  /** The history action, drawn beside Preview: both are ways of looking at the document. */
+  history?: React.ReactNode;
   onTogglePreview: () => void;
   onSave: () => void;
   onPublish: () => void;
@@ -86,6 +89,7 @@ export function PublishBar({
         <span className="shrink-0 font-mono text-xs text-muted-foreground">{typeName}</span>
 
         <div className="ml-auto flex items-center gap-2">
+          {history}
           <Button
             type="button"
             variant="ghost"
@@ -164,8 +168,9 @@ export function PublishBar({
       </div>
 
       <p className="px-4 pb-1.5 text-xs text-muted-foreground">
-        Every keystroke saves the draft — a draft is a place for a half-written document, so nothing
-        here blocks on validation. Publishing is the step that moves it onto the published id.
+        Nothing is written until you save. A draft is a place for a half-written document, so a save
+        is never blocked on validation — publishing is the step that warns, and the step that moves
+        the draft onto the published id.
         {canEdit && (
           <>
             {' '}
@@ -188,7 +193,7 @@ function versionLine({
   isNew: boolean;
 }): string {
   if (isNew) {
-    return 'A new document. It exists nowhere until the first keystroke writes a draft.';
+    return 'A new document. It exists nowhere until the first save writes a draft.';
   }
   if (hasDraft && published) {
     return 'Showing the draft, which differs from what is published. Readers still see the published version.';
