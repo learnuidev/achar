@@ -50,8 +50,18 @@ import { apiUrlFromEnv } from '@/lib/env';
 export const metadata: Metadata = {
   title: 'API reference — read Achar from your own code',
   description:
-    'The content API, as an API token reaches it: query a dataset with GROQ, read and write documents, and upload assets. Documented endpoint by endpoint, with a playground.',
+    'The content API, as an API token reaches it: query a dataset with GROQ, write and publish documents, define their content types, and upload assets. Documented endpoint by endpoint, with a playground.',
 };
+
+/**
+ * The body the quickstart's *Add a document* step sends.
+ *
+ * Written out rather than built from the card's fields, and that is the one place on
+ * this page where that is true: a batch is a list of operations with an order that
+ * carries meaning — `create` then `publish` is what makes one request enough — and
+ * there is no field-by-field example that would show the order.
+ */
+const CREATE_SAMPLE = `{"mutations":[{"create":{"_id":"hello","_type":"post","title":"Hello world","body":"First line\\n\\nSecond paragraph"}},{"publish":{"id":"hello"}}]}`;
 
 export default function ApiDocsPage() {
   const baseUrl = apiUrlFromEnv();
@@ -60,6 +70,7 @@ export default function ApiDocsPage() {
   // the cards below are built from: the first call anybody makes with a new token.
   const info = API_ENDPOINTS.find((endpoint) => endpoint.id === 'info');
   const query = API_ENDPOINTS.find((endpoint) => endpoint.id === 'query');
+  const mutate = API_ENDPOINTS.find((endpoint) => endpoint.id === 'mutate');
   const firstCall = info ? curlFor(info, baseUrl) : '';
 
   return (
@@ -159,7 +170,26 @@ export default function ApiDocsPage() {
                 </li>
                 <li className="grid gap-2">
                   <p className="text-sm">
-                    <span className="font-medium">4. Then query your own content.</span> GROQ is the
+                    <span className="font-medium">4. Add a document.</span> One request writes content
+                    and makes it live: a batch is applied in order, so{' '}
+                    <span className="font-mono text-xs">create</span> followed by{' '}
+                    <span className="font-mono text-xs">publish</span> is a document a site serves by
+                    the time this answers. A rich-text field takes a plain string — one paragraph per
+                    line — so nothing here has to know the shape of Portable Text.
+                  </p>
+                  {mutate && (
+                    <CodeBlock
+                      code={curlFor(mutate, baseUrl, {
+                        path: { projectId: 'proj_647baf1fe6b1', dataset: 'production' },
+                        body: { __raw: CREATE_SAMPLE },
+                      })}
+                      label="cURL"
+                    />
+                  )}
+                </li>
+                <li className="grid gap-2">
+                  <p className="text-sm">
+                    <span className="font-medium">5. Then query your own content.</span> GROQ is the
                     whole point: one language over the dataset, evaluated server-side, with parameters
                     rather than string interpolation.
                   </p>

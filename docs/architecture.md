@@ -107,6 +107,12 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
   either way, so a number where the schema says string is a mistake in a draft too.
 - `initialDocument(type: SchemaType): Record<string, unknown>` — a new document
   with every `initialValue` applied and every required string an empty string.
+- `coerceDocument(type: SchemaType, document): Record<string, unknown>` — a document
+  as a caller sent it, read into the shape that gets stored. `blocksFromText(text,
+  prefix)` is the whole rule: one paragraph block per line, blank lines dropped, keys
+  scoped by the field's path so no two blocks in a document share one. The API runs
+  it before validation, so that a rich-text field may arrive as a plain string
+  without `required` losing its meaning — see the route table's note.
 - `previewOf(type: SchemaType, document): { title: string; subtitle?: string; mediaField?: string }`
   — a type that names no `preview` is listed by its `title`, `name`, or first field
   holding words, because a type written by hand arrives with no preview at all.
@@ -161,7 +167,7 @@ await client.query<Post[]>('production', { query: '*[_type == "post"] | order(pu
   `createProject`, `getProject`, `updateProject`, `deleteProject`, `listMembers`,
   `inviteMember`, `updateMemberRole`, `removeMember`, `resendInvitation`,
   `acceptInvitation`, `listDatasets`, `createDataset`, `getDataset`,
-  `deleteDataset`, `getSchema`, `putSchema`, `query`, `listDocuments`,
+  `deleteDataset`, `getSchema`, `putSchema`, `createType`, `query`, `listDocuments`,
   `getDocument`, `mutate`, `publishDocument`, `unpublishDocument`,
   `discardDraft`, `listDocumentVersions`, `getDocumentVersion`,
   `restoreDocumentVersion`, `listAssets`, `createUploadTicket`, `commitAsset`, `deleteAsset`,
@@ -275,7 +281,7 @@ the handler never sees an unauthenticated request at all.
 | GET | `/v1/data/query/{p}/{d}` | readers | **GROQ.** `?query=&params=&perspective=` |
 | GET | `/v1/data/list/{p}/{d}` | readers | Documents of one type, paged, for a studio's list |
 | GET | `/v1/data/doc/{p}/{d}/{docId}` | readers | One document, at one perspective |
-| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore` |
+| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`. `create` + `publish` in one batch is how content is added and made live in a single request |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions` | readers | Every time the document was published |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions/{version}` | readers | One version, as it was |
 | GET | `/v1/assets/{p}/{d}` | readers | The asset library |
@@ -300,6 +306,21 @@ points at any of them with a reference string rather than with bytes:
 A video's dimensions are its frame size, kept for the same reason an image's are:
 a page can hold the space before the first frame arrives. Nothing is transcoded —
 the file that was uploaded is the file the CDN serves.
+
+**A document written whole may carry a rich-text field as a plain string**, and the
+API stores it as blocks — one paragraph per line, blank lines dropped
+(`blocksFromText`). Rich text is stored as blocks of spans because that is what an
+editor needs and what the renderer reads, but a caller over the API has a *string*:
+a script importing posts, a build step writing a changelog, a migration out of
+another CMS. Asking each of them to assemble
+`{"_type":"block","children":[{"_type":"span",…}]}` by hand is asking every client
+to be an editor. `coerceDocument` walks the *type* to find which fields those are
+and runs **before** validation, so `required` and everything else still apply to
+what would actually be stored — an empty string becomes no blocks, which is blank,
+where a block holding an empty span would be a paragraph. It applies to `create`,
+`createOrReplace` and `createIfNotExists`; `publish` and `restore` copy a row that
+has already been through it, and a `patch` edits one field of a document that
+already exists, so it sends the nodes it read.
 
 ### GROQ
 

@@ -22,7 +22,7 @@
  */
 
 import type { DatasetSchema, SchemaType } from '@achar/types';
-import { previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
+import { coerceDocument, previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
 import { createHash } from 'node:crypto';
 import { Keys, deleteItem, getItem, putItem, tryUpdateItem, type Item } from './dynamo';
 import { HttpError } from './http';
@@ -349,6 +349,29 @@ export function requireDocumentShape(value: string | undefined): DocumentShape {
 /** The type a document names, or `undefined` when the schema has never heard of it. */
 export function documentType(schema: DatasetSchema, name: string): SchemaType | undefined {
   return schema.types.find((type) => type.name === name && type.kind !== 'object');
+}
+
+/**
+ * What a caller sent for a document, read into the shape that gets stored.
+ *
+ * `coerceDocument` is where the rule lives and why it exists; this is the part that
+ * needs the dataset's schema, since the only thing that says `"Hello"` is a
+ * paragraph rather than a malformed string is the field it was sent for.
+ *
+ * A document of an unknown type is passed through untouched rather than refused
+ * here: `assertValidDocument` runs immediately after and answers `UNKNOWN_TYPE`
+ * with the list of types this dataset actually has, which is a better sentence than
+ * anything this could write about a type it cannot find.
+ */
+export function coerceDocumentFields(
+  schema: DatasetSchema,
+  document: Record<string, unknown>,
+): Record<string, unknown> {
+  const name = typeof document._type === 'string' ? document._type : '';
+  const type = documentType(schema, name);
+  if (!type) return document;
+
+  return coerceDocument(type, document);
 }
 
 /**

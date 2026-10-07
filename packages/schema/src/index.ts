@@ -1,5 +1,6 @@
 export * from './dsl';
 export * from './validate';
+export * from './coerce';
 export * from './initial';
 export * from './preview';
 export * from './slug';

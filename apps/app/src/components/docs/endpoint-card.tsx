@@ -42,7 +42,7 @@ export function EndpointCard({ endpoint, baseUrl }: { endpoint: ApiEndpoint; bas
 
         <div className="space-y-1">
           <h3 className="text-base font-medium">{endpoint.summary}</h3>
-          <p className="text-sm text-muted-foreground">{endpoint.description}</p>
+          <p className="text-sm text-muted-foreground">{renderEmphasis(endpoint.description)}</p>
         </div>
       </header>
 

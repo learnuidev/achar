@@ -19,11 +19,14 @@
       "http://localhost:3000",
       "http://localhost:3000/studio/auth/callback",
       "http://localhost:3002",
-      "http://localhost:3002/auth/callback"
+      "http://localhost:3002/studio/auth/callback",
+      "https://dev.achar.app",
+      "https://dev.achar.app/studio/auth/callback"
     ],
     "logoutUrls": [
       "http://localhost:3000",
-      "http://localhost:3002"
+      "http://localhost:3002",
+      "https://dev.achar.app"
     ]
   },
   "googleClientSecretName": "achar/dev/google-client-secret"

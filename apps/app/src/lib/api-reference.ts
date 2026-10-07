@@ -186,9 +186,9 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
   },
   {
     id: 'content',
-    title: 'Reading content',
+    title: 'Content',
     description:
-      'The half of the API a site calls. These routes take an **API token**, and every one of them is a read of a dataset — the query language, a page of a list, one document, and the history of one.',
+      'The content API: the reads a site makes **and the writes a build or a script makes**. These routes take an **API token** — the query language, a page of a list, one document, the history of one, and the batch of mutations that creates and changes documents.',
     endpoints: [
       {
         id: 'query',
@@ -335,9 +335,9 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         id: 'mutate',
         method: 'POST',
         path: '/v1/data/mutate/{projectId}/{dataset}',
-        summary: 'An ordered batch of writes',
+        summary: 'Create, change and publish documents',
         description:
-          'The write half: a batch of mutations applied in order. The batch is the unit rather than the request, because a `create` followed by a `patch` of the same document is how a client saves a document it has just made, and splitting that into two requests leaves a half-made document behind whenever the second fails.',
+          '**The write half, and one request is all it takes to add content**: a batch of mutations applied in order. The batch is the unit rather than the request, because `create` followed by `publish` is how a document arrives live in a single call, and because a `create` followed by a `patch` is how a client saves a document it has just made — splitting those into two requests leaves a half-made document behind whenever the second fails.',
         auth: 'token',
         parameters: [PROJECT_ID, DATASET],
         body: [
@@ -346,8 +346,8 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
             type: 'Mutation[]',
             required: true,
             description:
-              'Each element names exactly one operation: `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`.',
-            example: '[{"createIfNotExists":{"_id":"drafts.pricing","_type":"pricing"}},{"patch":{"id":"drafts.pricing","set":{"title":"Pricing"}}}]',
+              'Each element names exactly one operation: `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`. They are applied **in order**, so a `create` and a `publish` of the same id in one batch is a document that is live by the time the response is written.',
+            example: '[{"create":{"_id":"hello","_type":"post","title":"Hello world","body":"First line\\n\\nSecond paragraph"}},{"publish":{"id":"hello"}}]',
           },
           {
             name: 'atomic',
@@ -358,13 +358,16 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
         responseStatus: '200 OK',
         responseExample: `{
   "results": [
-    { "documentId": "pricing", "operation": "create", "rev": "01JQ8Z…" },
-    { "documentId": "pricing", "operation": "patch", "rev": "01JQ8ZA…" }
+    { "documentId": "hello", "operation": "create", "rev": "01JQ8Z…" },
+    { "documentId": "hello", "operation": "publish", "rev": "01JQ8ZA…" }
   ],
   "transactionId": "01JQ8ZB…"
 }`,
         notes: [
-          '**A mutation never writes the published row directly.** `create`, `createOrReplace`, `createIfNotExists`, `patch` and `restore` write the *draft*; `publish` is what moves a draft onto the published id, and `unpublish` takes it back off. That is why publishing is a step somebody takes rather than a side effect of typing.',
+          '**To add content and make it live, send `create` and `publish` in the same batch.** One request, applied in order — see **Add a document** in the quickstart above.',
+          '**A rich-text field takes a plain string**, so nothing has to know the shape of Portable Text to write it: `"body": "First line\\n\\nSecond paragraph"` is stored as one paragraph block per line, with blank lines dropped. A field that is already an array of blocks is stored exactly as sent, which is what the studio does.',
+          '**A mutation never writes the published row directly.** `create`, `createOrReplace`, `createIfNotExists`, `patch` and `restore` write the **draft**; `publish` is what moves a draft onto the published id, and `unpublish` takes it back off. That is why publishing is a step somebody takes rather than a side effect of typing — and why a site sees nothing until it has been taken.',
+          'A string is read as blocks on a **create**, not on a `patch`. A patch edits fields of a document that already exists, so it sends the nodes it read back — a client that has the document has them.',
           'A **draft may be missing a required field** — that is what a draft is for. Publishing is where a document has to be whole, and it is refused with the fields it is missing.',
           'Every publish is recorded: `GET …/versions` is the history of what a document has said, and `restore` puts one of those back as the draft.',
           'A token needs the `EDITOR` role or better to write. See **Tokens** for what a role reaches.',

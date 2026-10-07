@@ -21,6 +21,8 @@
  * was, which is what makes this safe to run over every field of every document.
  */
 
+import type { PortableTextBlock } from '@achar/types';
+
 /** A span, as portable text stores it. */
 interface SpanLike {
   _type?: unknown;
@@ -79,6 +81,57 @@ export function coalesceSpans<T>(value: T): T {
 /** A span's text, whatever it is — a span with no text joins as nothing. */
 export function spanText(span: SpanLike): string {
   return typeof span.text === 'string' ? span.text : '';
+}
+
+/**
+ * A plain string, read as portable text: **one block per line**.
+ *
+ * This is what lets a caller write content without learning the shape of rich
+ * text. An editor produces blocks and spans because it has a selection, a toolbar
+ * and a caret; a script has a string, and asking it to assemble
+ * `{"_type":"block","children":[{"_type":"span",…}]}` around one sentence is
+ * asking it to be an editor. So the plainest thing anybody can send — text — is
+ * accepted and stored as the nodes everything else already reads.
+ *
+ * **A line is a block rather than a run inside one**, because a newline inside a
+ * span is invisible: rendering is HTML, where a run of whitespace collapses, so
+ * `"one\ntwo"` stored as one block draws as `one two`. Paragraph structure is
+ * therefore carried by blocks, which is the level that survives rendering.
+ *
+ * Blank lines are dropped rather than becoming empty blocks — a run of them is
+ * somebody's spacing, and a paragraph with no words in it draws a gap nobody
+ * wrote. A string with nothing in it is therefore **no blocks at all**, which is
+ * the answer that keeps `required` meaning something: an array of no blocks is
+ * blank, where a block holding an empty span is a paragraph.
+ *
+ * `prefix` scopes the `_key`s, and every caller passes the field's path within the
+ * document — `body`, `sections[0].body`. Paths are built from identifiers, `[` `]`
+ * and `.`, so no path contains the `-` this joins with, and `path` + line number
+ * therefore cannot collide with another field's keys.
+ */
+export function blocksFromText(text: string, prefix: string): PortableTextBlock[] {
+  const blocks: PortableTextBlock[] = [];
+  let line = 0;
+
+  for (const raw of text.split('\n')) {
+    // A CRLF line arrives as `…\r`, and a stray carriage return inside span text
+    // is a character the renderer would collapse anyway.
+    const trimmed = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (trimmed.trim() === '') continue;
+
+    line += 1;
+    blocks.push({
+      _type: 'block',
+      _key: `${prefix}-${line}`,
+      style: 'normal',
+      children: [
+        { _type: 'span', _key: `${prefix}-${line}-1`, text: trimmed, marks: [] },
+      ],
+      markDefs: [],
+    });
+  }
+
+  return blocks;
 }
 
 function marksOf(span: SpanLike): string {

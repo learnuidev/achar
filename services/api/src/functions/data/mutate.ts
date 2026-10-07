@@ -28,7 +28,7 @@ import {
   withHandler,
   type ApiEvent,
 } from '../../lib/http';
-import { assertValidDocument, getDatasetSchema } from '../../lib/schemas';
+import { assertValidDocument, coerceDocumentFields, getDatasetSchema } from '../../lib/schemas';
 import { queueWebhookEvents } from '../../lib/webhooks';
 
 /** Exactly one of these names each element of a batch, and that is the shape. */
@@ -66,6 +66,11 @@ async function main(event: ApiEvent) {
     mutations,
     atomic,
     validate,
+    // So that a caller holding a string can write a rich-text field: the plainest
+    // thing anybody can send is text, and assembling `{"_type":"block","children":[…]}}`
+    // around one sentence is asking every client to be an editor. See
+    // `coerceDocument`, and its exemption for patches.
+    coerce: (fields) => coerceDocumentFields(schema, fields),
     // Recorded on the version a publish leaves behind, so a history says who
     // published what rather than only when.
     publishedBy: viewer.userId,

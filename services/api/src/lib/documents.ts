@@ -572,6 +572,23 @@ interface RowSeed {
   updatedAt?: string;
 }
 
+/**
+ * The fields of a document being written whole, as they will be stored.
+ *
+ * One line, and it is a function because there are three callers — `create`,
+ * `createOrReplace` and `createIfNotExists` — and a coercion applied at two of
+ * three call sites is a rule that holds until somebody writes the mutation that
+ * forgets it. `publish` and `restore` are not callers: both copy a row that has
+ * already been through here, so running it again would be converting a value that
+ * is already blocks.
+ */
+function writeFields(
+  context: MutationContext,
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  return context.coerce ? context.coerce(fields) : fields;
+}
+
 function buildRow(seed: RowSeed): DocumentRow {
   // `_draft`, `_published` and `_editable` are what a *read* answers with rather
   // than what a row holds, so a document that came out of a read carries them —
@@ -639,6 +656,19 @@ export interface MutationContext {
    * the same batch can publish one document and draft another.
    */
   validate?: (document: AcharDocument, stage: 'draft' | 'published') => void;
+  /**
+   * Runs over what a caller sent for a document that is being written whole, and
+   * answers what should be stored instead.
+   *
+   * The same exemption as `validate`: a patch is not a document, so there is no
+   * whole for this to read a field against. See `coerceDocument`, which is what the
+   * API passes here, and which exists so that a caller with a *string* can write a
+   * rich-text field without assembling blocks by hand.
+   *
+   * It runs **before** validation, and that ordering is the point: every other rule,
+   * `required` most of all, has to be applied to what would actually be stored.
+   */
+  coerce?: (fields: Record<string, unknown>) => Record<string, unknown>;
 }
 
 export interface MutationInput extends MutationContext {
@@ -828,7 +858,12 @@ async function applyOne(
     const rows = await currentRows(context, working, id);
     if (rows.draft || rows.published) throw conflict(`Document ${id} already exists`, id);
 
-    const row = buildRow({ ...context, id, draft: true, fields: body as Record<string, unknown> });
+    const row = buildRow({
+      ...context,
+      id,
+      draft: true,
+      fields: writeFields(context, body),
+    });
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
     return { result: { documentId: id, operation: 'create', rev: row._rev }, created: true };
@@ -844,7 +879,7 @@ async function applyOne(
       ...context,
       id,
       draft: true,
-      fields: body as Record<string, unknown>,
+      fields: writeFields(context, body),
       // A replacement keeps when the document first existed. Not a detail: it is
       // what a studio sorts by and what it draws as "created".
       createdAt: rows.draft?._createdAt ?? rows.published?._createdAt,
@@ -874,7 +909,7 @@ async function applyOne(
       ...context,
       id,
       draft: true,
-      fields: body as Record<string, unknown>,
+      fields: writeFields(context, body),
       createdAt: rows.published?._createdAt,
     });
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
