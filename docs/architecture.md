@@ -250,7 +250,7 @@ cdk deploy --all --context stage=dev
 | `MembersTable` | `projectId` + `memberKey` | role, status, email, invitedEmail; GSIs `UserProjectIndex`, `InviteEmailIndex` |
 | `DatasetsTable` | `projectId` + `datasetName` | visibility, counts |
 | `SchemasTable` | `projectId` + `datasetKey` | the schema, and its revision |
-| `DocumentsTable` | `documentKey` (`{projectId}#{dataset}#{id}`) + `_rev` | the document; GSIs `TypeIndex`, `IdIndex`, `UpdatedIndex` |
+| `DocumentsTable` | `documentKey` (`{projectId}#{dataset}#{id}`) | the document; GSIs `TypeIndex` (`typeKey` + `_updatedAt`), `UpdatedIndex` (`datasetKey` + `_updatedAt`) |
 | `AssetsTable` | `projectId` + `assetKey` | metadata; GSI `DatasetCreatedIndex` |
 | `TokensTable` | `tokenId` | hashed secret, role, dataset; GSI `ProjectIndex` |
 | `WebhooksTable` | `projectId` + `webhookId` | url, events, filter, projection |

@@ -1,7 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // Next inlines `process.env.NEXT_PUBLIC_*` at build time, so this package
+    // reads `process` for real. The DOM lib comes from the base config; `node`
+    // has to be named here because TypeScript only includes `@types` packages
+    // that are listed, and this one is not a dependency of its own.
+    "types": ["node", "react"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

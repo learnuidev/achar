@@ -1,0 +1,214 @@
+import type { Tone } from "@/components/ui/chip";
+import type { EnvironmentView, RunAction, RunSummary } from "@/lib/types";
+
+/**
+ * A backend, named once — and the words the console uses about one.
+ *
+ * There is **one** backend: the CDK app in `infra/`. So "a backend" is only ever
+ * *that* app in a stage, and a row in the list is a stage rather than a program.
+ * Everything a row says is therefore a fact about five CloudFormation stacks —
+ * what they are called, which of them is complete, and whether this stage creates
+ * its own data or imports somebody else's.
+ *
+ * `lib/frontends.ts` is the same file for the other side: the names a page needs
+ * before the server has said anything, and the vocabulary for the states they are
+ * in. Both are imported from a server component and a client one, so both are
+ * JSON and words, with nothing that touches `fs` or a process.
+ */
+
+/**
+ * The root stacks, in the order a deploy creates them.
+ *
+ * **The words only.** What each one *holds* is `ROOT_STACKS` in `server/aws.ts`,
+ * which takes its suffixes from this list rather than repeating them: the
+ * environment card draws a tile per word from a client component, and a stack
+ * added to the CDK app has to appear both there and in the plan's own
+ * post-condition — which is exactly the kind of thing that gets done twice and
+ * once.
+ *
+ * `Webhook` rather than `Payment`: the queue is a fifth stack of its own here
+ * because publishing is event-driven and a delivery that fails must not fail the
+ * write that produced it.
+ */
+export const STACK_WORDS = ["Data", "Media", "Auth", "Webhook", "Api"] as const;
+
+export type StackWord = (typeof STACK_WORDS)[number];
+
+/** Where one environment's backend lives. The list, the picker and every link agree. */
+export function backendPath(stage: string): string {
+  return `/backends/${encodeURIComponent(stage)}`;
+}
+
+/* ------------------------------------------------------------------ *
+ * The states a row can be in
+ * ------------------------------------------------------------------ */
+
+export interface BackendState {
+  tone: Tone;
+  label: string;
+  /** The console is running something against this environment right now. */
+  running: boolean;
+}
+
+/**
+ * The state of one environment's backend, in one chip.
+ *
+ * Read from the stacks themselves rather than remembered here, and the same
+ * answer on the list and on the environment's own page — a row that said
+ * "deployed" above a page that said "partly deployed" would be two answers to
+ * one question.
+ *
+ * **A run in flight is the first thing it says**, and it has to be. The stacks of
+ * an environment being deployed are exactly the half-built set a "partly
+ * deployed" chip describes, so without this the row that says the most alarming
+ * possible thing is the one that is working correctly — and it says it about a
+ * deploy that has been running for forty seconds. The stack statuses catch up a
+ * few seconds after the run ends, which is when this stops applying.
+ *
+ * `activity` is the *direction* rather than a flag, because a delete is not a
+ * deploy and a row that said "deploying" over one would be telling somebody the
+ * opposite of what is happening to their environment. Deleting gets the
+ * destructive tone for the same reason.
+ *
+ * `new` is the only state that is about an environment the repository has never
+ * heard of, and it is not a verdict: a stage with no config file is the normal
+ * state of a stage somebody is about to create — or of one that has just been
+ * deleted, which is the same thing said from the other side.
+ */
+export function backendState(
+  environment: EnvironmentView | null,
+  account: string | null,
+  activity: RunAction | null = null,
+): BackendState {
+  if (activity === "destroy") return { tone: "bad", label: "deleting", running: true };
+  if (activity === "deploy") return { tone: "run", label: "deploying", running: true };
+  if (!environment) return { tone: "muted", label: "new", running: false };
+  if (environment.deployed) return { tone: "ok", label: "deployed", running: false };
+  if (environment.partial) return { tone: "warn", label: "partly deployed", running: false };
+  if (!environment.hasConfig) {
+    return { tone: "muted", label: "needs a config file", running: false };
+  }
+  if (environment.account && account && environment.account !== account) {
+    return { tone: "bad", label: "different account", running: false };
+  }
+  return { tone: "muted", label: "not deployed", running: false };
+}
+
+/**
+ * The run going for one stage, out of everything the console knows is running.
+ *
+ * Null for a stage nobody is running anything against, which is nearly always. A
+ * stage can only have one run at a time — `server/run.ts` refuses the second,
+ * whichever direction it goes in — so the first match is the only match, and its
+ * `action` is what a row's chip and line are written from.
+ */
+export function runningFor(runs: RunSummary[], stage: string): RunSummary | null {
+  return runs.find((run) => run.stage === stage && run.status === "running") ?? null;
+}
+
+/**
+ * What a run is doing, in one line, for a row that is not the run's own page.
+ *
+ * The step it is on and how far it has got, which is the whole of what somebody
+ * glancing at the list wants: *which* step is the difference between "it is
+ * going" and "it has been stuck on the same thing for ten minutes".
+ */
+export function runProgress(run: RunSummary): string {
+  const running = run.steps.findIndex((step) => step.status === "running");
+  const pending = run.steps.findIndex((step) => step.status === "pending");
+  const at = running >= 0 ? running : pending >= 0 ? pending : run.steps.length - 1;
+  const step = run.steps[at];
+  const what = run.action === "destroy" ? "Deleting" : "Deploying";
+  return `${what} — step ${at + 1} of ${run.steps.length}${step ? ` · ${step.title}` : ""}`;
+}
+
+/**
+ * The one line under a stage's name — on its row, and at the top of its page.
+ *
+ * The interesting thing about this backend is which of its resources it *owns*,
+ * because that is what decides whether a deploy here can change what another
+ * environment reads. `dev` imports; a new environment creates. So the sentence
+ * leads with the data rather than with the API.
+ *
+ * **An importing environment gets no line at all.** It used to say how many
+ * tables it imports and that they are shared with every other importing stage —
+ * a fact about *resources* rather than about this environment, repeated by every
+ * screen that mentions the environment. The tabs that show those resources are
+ * where it belongs: the tables tab lists them by name, and the Deployments tab is
+ * where a deploy that cannot touch them is run. What is left above it — the
+ * stage, its state, its address — is what the environment *is*.
+ */
+export function backendBlurb(environment: EnvironmentView | null): string | null {
+  if (!environment) {
+    return (
+      "No config file yet — that is what the plan's third step writes. " +
+      "A new environment creates everything: its own tables, assets bucket, " +
+      "distribution and user pool."
+    );
+  }
+  if (environment.ownsEverything) {
+    return "Creates everything it stands on — its own tables, assets bucket, distribution and user pool.";
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ *
+ * The five views of one environment
+ * ------------------------------------------------------------------ */
+
+/**
+ * Five questions, in the order they are asked: is this environment ready, what
+ * is in it and what came out, what has been deployed to it, what is it saying,
+ * and what is in its tables.
+ *
+ * **Checklist is first because it is the front door for a new environment** —
+ * the things a person has to supply before there is anything to deploy, and the
+ * row that says which of them is missing. Env variables is the read-only half of
+ * the same picture: the outputs a deploy published and the inputs it read.
+ *
+ * **DynamoDB tables is last because it is the deepest** — it is the one view
+ * that reads the product's own rows rather than the deployment's description of
+ * itself, and it is reached for a specific question ("did the webhook write this
+ * document?") rather than read on the way past. Putting it beside Logs is
+ * deliberate: they are the two tabs somebody opens when something did not
+ * happen, and they are the two that answer "what did it actually do".
+ *
+ * **A `hint` is the line the strip draws under itself**, and a tab is better off
+ * without one when its screen already says what it is. The Checklist has none:
+ * its rows are the sentence — a tick and the reason beside it — and a paragraph
+ * above them explaining that a tick means a requirement is met is one screen
+ * telling somebody the same thing twice.
+ *
+ * Which one is showing is `?tab=`, and the list below is the whole of what a URL
+ * may ask for: `useTabParam` matches against it and treats anything else as the
+ * first tab, so a link written before a tab existed still lands somewhere real.
+ */
+export const BACKEND_TABS = [
+  {
+    id: "checklist",
+    label: "Checklist",
+  },
+  {
+    id: "env",
+    label: "Env variables",
+    hint: "The outputs a deploy publishes — the same values the frontends are handed — and the inputs as the deploy reads them. Editable on the Checklist tab.",
+  },
+  {
+    id: "deployments",
+    label: "Deployments",
+    hint: "The checklist a deploy walks, what CloudFormation has actually done to this environment, and where the environment itself is deleted from.",
+  },
+  {
+    id: "logs",
+    label: "Logs",
+    hint: "CloudWatch, one function at a time. Event-driven functions first — they are the ones with nowhere else to speak.",
+  },
+  {
+    id: "tables",
+    label: "DynamoDB tables",
+    hint: "Every table this environment reads, what is in one, and a page of its rows. Read-only: the console queries and scans, and never writes.",
+  },
+] as const;
+
+export type BackendTab = (typeof BACKEND_TABS)[number]["id"];

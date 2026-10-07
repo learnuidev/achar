@@ -1,14 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* The shared packages live outside this app, so Tailwind has to be told to read
-   them: without this the classes only the packages use — the console's step
-   rows, the studio's field editors — are never generated, and the app renders
-   unstyled exactly where it matters most. */
-@source "../../../../packages/ui/src";
-@source "../../../../packages/schema/src";
-@source "../../../../packages/auth/src";
-
+/* No `@source` for `packages/*`, and that is the point rather than an omission:
+   this app has no classes in them. The console imports no `@achar/*` package —
+   a control room that shares a component with the thing it deploys cannot be
+   used to diagnose that thing — so every class it renders is written under
+   `src/`, which Tailwind already scans. */
 @custom-variant dark (&:is(.dark *));
 
 /* Fonts are declared here rather than mapped through :root, because a token that

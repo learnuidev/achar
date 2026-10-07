@@ -3,12 +3,17 @@ const nextConfig = {
   reactStrictMode: true,
 
   /**
-   * The packages are source, not builds: `@achar/*` ships `.ts`/`.tsx` and no
-   * `dist/`, so Next has to compile them as if they were part of this app. That
-   * is deliberate — one TypeScript program across the app and its packages means
-   * a change to a shared component is a change the app's typecheck sees.
+   * The console is *not* an Achar product surface.
+   *
+   * Web and studio draw with `@achar/ui` because they are the same product seen
+   * from two sides. This app is the room the operator stands in — it reads the
+   * repository, runs `aws` and `cdk`, and starts the other three apps. Sharing
+   * the product's primitives would tie an internal tool to a design that is meant
+   * to move as the product moves, and would drag the package graph (Radix,
+   * Amplify, the aliases) into a tool that has no business rendering a document.
+   *
+   * So: no `transpilePackages`, no `@achar/*` imports, one self-contained app.
    */
-  transpilePackages: ['@achar/types', '@achar/schema', '@achar/api', '@achar/auth', '@achar/ui'],
 };
 
 export default nextConfig;
