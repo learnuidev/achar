@@ -44,6 +44,40 @@ export const routes = {
     `${base}/projects/${projectId}/${dataset}/content/${type}`,
   document: (projectId: string, dataset: string, type: string, documentId: string) =>
     `${base}/projects/${projectId}/${dataset}/content/${type}/${encodeURIComponent(stripDraftId(documentId))}`,
+  /**
+   * One document, told which language to open in.
+   *
+   * **The language belongs in the URL because it is part of what a person is looking
+   * at.** A link should open where it says it opens, a reload should not put somebody
+   * back in English halfway through a translation, and two tabs on the same document
+   * can be two languages without one of them being wrong. `lang` is the switch's own
+   * param and is replaced rather than appended.
+   *
+   * Everything else the URL carried is copied through rather than rebuilt, and `new=1`
+   * is why: it is what tells the editor the document does not exist yet, so a language
+   * switch that dropped it would turn a first save into a read of a row that is not
+   * there.
+   */
+  documentInLanguage: (
+    projectId: string,
+    dataset: string,
+    type: string,
+    documentId: string,
+    language: string,
+    query: Record<string, string | string[] | undefined> = {},
+  ) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (key === 'lang' || value === undefined) continue;
+      if (Array.isArray(value)) {
+        for (const entry of value) params.append(key, entry);
+        continue;
+      }
+      params.set(key, value);
+    }
+    params.set('lang', language);
+    return `${routes.document(projectId, dataset, type, documentId)}?${params.toString()}`;
+  },
   newDocument: (projectId: string, dataset: string, type: string) =>
     `${base}/projects/${projectId}/${dataset}/content/${type}?new=1`,
   assets: (projectId: string, dataset: string) => `${base}/projects/${projectId}/${dataset}/assets`,

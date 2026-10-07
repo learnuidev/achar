@@ -2,11 +2,13 @@
 
 import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, Textarea, cn } from '@achar/ui';
 import { SparklesIcon } from 'lucide-react';
+import Link from 'next/link';
 import type { PortableText, SchemaField } from '@achar/types';
 import type { SchemaIssue } from '@achar/schema';
 import { isLanguageMap, languageValue, setLanguageValue, slugify } from '@achar/schema';
 import { hasIssueAt } from '@/lib/schema';
 import { languageName } from '@/lib/language';
+import { routes } from '@/lib/routes';
 import { toDateInput, toDateTimeLocal } from '@/lib/format';
 import { AssetField } from '@/components/editor/asset-field';
 import { ArrayField } from '@/components/editor/array-field';
@@ -59,7 +61,80 @@ export interface FieldControlProps {
 
 export function FieldControl(props: FieldControlProps) {
   if (props.field.localized) return <LocalizedControl {...props} />;
+  // A shared field is only a trap while somebody is editing a language that is not the
+  // one its one value is written in. In the default language it is simply a field.
+  if (
+    props.language !== props.defaultLanguage &&
+    !props.readOnly &&
+    isProse(props.field)
+  ) {
+    return <SharedProseControl {...props} />;
+  }
   return <FieldControlBody {...props} />;
+}
+
+/**
+ * The field types a person reads as prose, and therefore mistakes for a translation.
+ *
+ * The test is the *control's* rather than the model's: a string, a paragraph and rich
+ * text are the three things somebody types sentences into. A number, a date, a switch,
+ * a reference, an asset and a slug are values nobody reads as prose.
+ */
+function isProse(field: SchemaField): boolean {
+  if (field.type === 'text' || field.type === 'portableText') return true;
+  if (field.type !== 'string') return false;
+  // A closed set of values is a picker, not prose: `status` is `published` in every
+  // language, and a select is nobody's sentence.
+  return !field.options || field.options.length === 0;
+}
+
+/**
+ * A prose field the schema holds as **one value**, drawn in a language that is not the
+ * default: **editable, and marked as shared underneath**.
+ *
+ * Whether a field holds one value per language or one value for all of them is a
+ * decision made on the schema screen, and the two look identical here — same box, same
+ * label, and the language switch above them says "French". So somebody switches to
+ * French, types a translation into a field the schema never made translatable, and the
+ * write goes to the *one* value every language reads: English is rewritten with the
+ * French, French falls back to English, and both lanes then show the same French text.
+ * Nothing fails, so nothing says so.
+ *
+ * The note is what says so, where the typing happens. **It does not block the field**:
+ * a shared value is a real thing to edit, and somebody fixing a typo in it from the
+ * French lane is doing nothing wrong — they are only wrong if they believe it is a
+ * translation. Making it translatable is the one step that turns this box into a French
+ * one, and it is a click from the link here.
+ */
+function SharedProseControl({
+  field,
+  language,
+  defaultLanguage,
+  projectId,
+  dataset,
+  ...rest
+}: FieldControlProps) {
+  return (
+    <div className="grid gap-1">
+      <FieldControlBody
+        {...rest}
+        field={field}
+        language={language}
+        defaultLanguage={defaultLanguage}
+        projectId={projectId}
+        dataset={dataset}
+      />
+
+      <p className="px-1 text-xs text-muted-foreground">
+        Shared by every language — one value, not a translation, so editing it here changes it in{' '}
+        {languageName(defaultLanguage)} too. Make it translatable in{' '}
+        <Link href={routes.schema(projectId, dataset)} className="text-foreground underline">
+          this type&rsquo;s schema
+        </Link>{' '}
+        to give it one value per language.
+      </p>
+    </div>
+  );
 }
 
 /**

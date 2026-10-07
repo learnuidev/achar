@@ -386,6 +386,13 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
             type: 'boolean',
             description: 'Fail the whole batch rather than applying what can be applied. One transaction.',
           },
+          {
+            name: 'language',
+            type: 'string',
+            description:
+              'The language every element in the batch is written in, unless the element names its own with `_language`. **This is what keeps a save inside one language**: a localized field’s plain value is written into this language’s slot. Absent, a plain value is written in the dataset’s default language — so a French write with no language anywhere becomes the *English* one, and a reader then sees French in both, because a read falls back from a language that has nothing in it to the default.',
+            example: 'fr',
+          },
         ],
         responseStatus: '200 OK',
         responseExample: `{

@@ -246,6 +246,22 @@ export function DocumentEditor({
             : []),
           ...patches,
         ],
+        /**
+         * **The language this save is in, said once for the whole batch.**
+         *
+         * Every patch above that writes a language names it itself, and that is what
+         * keeps one language out of another. This is the second lock on the same door,
+         * and it is the one that holds when a patch does *not* name one: the API reads a
+         * plain value with no language as the **default** language, so a French title
+         * written without a marker becomes the English one — and because a read falls
+         * back from French to English, the person then sees their French in both lanes.
+         * That is the whole bug this line exists to prevent, and it is explained where
+         * the API applies it: `withLanguage`.
+         *
+         * The language on screen rather than the document's: it is the one the person is
+         * typing in, and it is the one a value with no marker of its own is in.
+         */
+        language,
         atomic: true,
       });
 
@@ -261,7 +277,19 @@ export function DocumentEditor({
       setSaveError(errorMessage(cause, 'Could not save the draft'));
       return false;
     }
-  }, [canEdit, client, projectId, dataset, draftId, type, value, pair.refresh, shown, published]);
+  }, [
+    canEdit,
+    client,
+    projectId,
+    dataset,
+    draftId,
+    type,
+    value,
+    language,
+    pair.refresh,
+    shown,
+    published,
+  ]);
 
   // Held in a ref so the keyboard shortcuts — and the publish that saves first —
   // always call the newest closure without re-registering listeners.

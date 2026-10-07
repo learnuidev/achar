@@ -606,8 +606,10 @@ export interface MutationRequest {
    *
    * A client saving a document it is *editing in French* says so once here rather than
    * on every element, and the API routes each plain value into that language's slot:
-   * `{ "mutations": [{"patch": {"id": "post-1", "set": {"title": "Bonjour"}}}], "_language": "fr" }`
-   * is a French title and cannot touch the English one.
+   * `{ "mutations": [{"patch": {"id": "post-1", "set": {"title": "Bonjour"}}}], "language": "fr" }`
+   * is a French title and cannot touch the English one. The spelling differs from an
+   * element's `_language` on purpose: a batch is not a document, so there is no schema
+   * to keep a field called `language` apart from the marker that names one.
    *
    * **This is the field that keeps a save from overwriting another language.** A patch
    * *replaces* the value at the path it names, so a client that sends a field's whole

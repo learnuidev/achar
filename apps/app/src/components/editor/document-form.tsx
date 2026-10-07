@@ -216,8 +216,9 @@ function LanguageLane({
       Editing <span className="font-medium text-foreground">{languageName(language)}</span>.{' '}
       {translated === 1 ? 'One field' : `${translated} fields`} of {type.title || type.name}{' '}
       {translated === 1 ? 'holds' : 'hold'} a value per language — each has a bar down its left
-      side, and one this language has not been written in is an empty box. Every other field is
-      shared by all of them.
+      side, and one this language has not been written in is an empty box. Prose the schema holds as
+      one value is shared by all of them and says so underneath — editing one of those here rewrites
+      it in every language, which is what the note is there to warn about before it happens.
     </div>
   );
 }
