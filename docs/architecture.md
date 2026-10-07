@@ -367,7 +367,8 @@ the handler never sees an unauthenticated request at all.
 | GET | `/v1/data/query/{p}/{d}` | readers | **GROQ.** `?query=&params=&perspective=&language=` |
 | GET | `/v1/data/list/{p}/{d}` | readers | Documents of one type, paged, for a studio's list |
 | GET | `/v1/data/doc/{p}/{d}/{docId}` | readers | One document, at one perspective, in one language |
-| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`. `create` + `publish` in one batch is how content is added and made live in a single request |
+| POST | `/v1/data/mutate/{p}/{d}` | editors | Apply an ordered batch of mutations — `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`, `approve`. `create` + `publish` in one batch is how content is added and made live in a single request |
+| POST | `/v1/data/translate/{p}/{d}` | editors | A model translates a document's fields into one of its dataset's languages, into the draft. See *AI translations* |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions` | readers | Every time the document was published |
 | GET | `/v1/data/doc/{p}/{d}/{docId}/versions/{version}` | readers | One version, as it was |
 | GET | `/v1/assets/{p}/{d}` | readers | The asset library |
