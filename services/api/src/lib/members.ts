@@ -214,14 +214,21 @@ export async function removeMember(projectId: string, memberKey: string): Promis
   return existing;
 }
 
-/** Re-sends the offer by refreshing when it was made — the row is the offer. */
+/**
+ * Re-sends the offer by refreshing when it was made — the row is the offer.
+ *
+ * The role moves too, when one is given: re-inviting somebody is also how an
+ * admin offers them a different place, and a route that could only re-date the
+ * offer would leave taking an invitation back as the only way to change it.
+ */
 export async function resendInvitation(
   projectId: string,
   memberKey: string,
   invitedBy: string,
+  role?: ProjectRole,
 ): Promise<MemberRow> {
   const row = await tryUpdateItem<MemberRow>('MembersTable', Keys.member(projectId, memberKey), {
-    set: { invitedAt: new Date().toISOString(), invitedBy },
+    set: { invitedAt: new Date().toISOString(), invitedBy, ...(role ? { role } : {}) },
     condition: '#status = :invited',
     names: { '#status': 'status' },
     values: { ':invited': 'INVITED' },

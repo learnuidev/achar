@@ -24,9 +24,10 @@ export const handler = withHandler(async (event) => {
   const body = jsonBody(event);
   const name = stringField(body, 'name');
   const organizationName = stringField(body, 'organizationName');
+  const description = stringField(body, 'description');
 
-  if (name === undefined && organizationName === undefined) {
-    throw new HttpError(400, 'BAD_REQUEST', 'Provide a name or an organizationName');
+  if (name === undefined && organizationName === undefined && description === undefined) {
+    throw new HttpError(400, 'BAD_REQUEST', 'Provide a name, an organizationName or a description');
   }
   // `stringField` trims, so an empty string here is a value somebody sent and
   // not an omission: writing it would leave the project named by nothing.
@@ -44,6 +45,7 @@ export const handler = withHandler(async (event) => {
   const updated = await updateProject(projectId, {
     ...(name === undefined ? {} : { name }),
     ...(organizationName === undefined ? {} : { organizationName }),
+    ...(description === undefined ? {} : { description }),
   });
 
   return toProject(updated, access.role);

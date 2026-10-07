@@ -73,9 +73,9 @@ export async function GET(request: Request) {
   const { profile, profileSource, region } = consoleDefaults();
   const ctx: Partial<AwsContext> = { profile, region };
 
-  // Together, not one after the other: five `aws` processes with nothing to say
-  // to each other, and running them in sequence is four seconds of the five
-  // spent waiting for a process to start.
+  // Together, not one after the other: these are six `aws` processes with
+  // nothing to say to each other, and run in sequence the page would spend four
+  // of its five seconds waiting for a process to start.
   const [cli, identity, stacks, tables, buckets] = await Promise.all([
     awsCli(),
     getIdentity(ctx),

@@ -40,6 +40,8 @@ export interface ProjectRecord extends Item {
   name: string;
   slug: string;
   organizationName: string;
+  /** What the project says about itself. Written by `PATCH`, not part of `Project`. */
+  description?: string;
   ownerId: string;
   memberCount: number;
   datasetCount: number;
@@ -138,6 +140,7 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectR
 export interface UpdateProjectInput {
   name?: string;
   organizationName?: string;
+  description?: string;
 }
 
 export async function updateProject(
@@ -152,6 +155,7 @@ export async function updateProject(
     set.slug = slugFor(patch.name);
   }
   if (patch.organizationName !== undefined) set.organizationName = patch.organizationName;
+  if (patch.description !== undefined) set.description = patch.description;
 
   const updated = await updateItem<ProjectRecord>('ProjectsTable', Keys.project(projectId), {
     set,

@@ -11,10 +11,11 @@
  * holds is not what this route is for.
  */
 
-import type { Member } from '@achar/types';
+import type { Member, ProjectRole } from '@achar/types';
+import { PROJECT_ROLES } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
-import { pathParam, withHandler } from '../../lib/http';
+import { HttpError, jsonBody, pathParam, stringField, withHandler } from '../../lib/http';
 import { resendInvitation, toApiMember } from '../../lib/members';
 
 export const handler = withHandler(async (event) => {
@@ -24,7 +25,19 @@ export const handler = withHandler(async (event) => {
 
   await requireProjectAccess(projectId, viewer, 'admin');
 
-  const row = await resendInvitation(projectId, userId, viewer.userId);
+  const role = stringField(jsonBody(event), 'role');
+  if (role !== undefined && !(PROJECT_ROLES as readonly string[]).includes(role)) {
+    throw new HttpError(400, 'BAD_REQUEST', `role must be one of ${PROJECT_ROLES.join(', ')}`, {
+      field: 'role',
+    });
+  }
+
+  const row = await resendInvitation(
+    projectId,
+    userId,
+    viewer.userId,
+    role as ProjectRole | undefined,
+  );
 
   const member: Member = toApiMember(row, viewer.userId);
   return member;
