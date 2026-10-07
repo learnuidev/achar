@@ -385,3 +385,48 @@ export function failureLines(result: { stderr: string; stdout: string }, count =
   const lines = lastMeaningfulLines(result.stderr || result.stdout, count);
   return lines.length ? lines.join(" · ") : "the command failed with no output";
 }
+
+interface ListTablesResponse {
+  TableNames?: string[];
+  LastEvaluatedTableName?: string;
+}
+
+/**
+ * The tables this account holds whose name begins with a prefix.
+ *
+ * `list-tables` has no prefix argument, so the filter has to happen here — and it
+ * is **paginated**, a hundred names at a time, which is the part that is easy to
+ * miss and is the same bug `server/logs.ts` documents for `list-functions`: a
+ * filter applied to the first page answers with whatever happened to be in it and
+ * says nothing about the rest, which on a busy account is most of the answer. So
+ * the cursor is followed to the end.
+ *
+ * This asks what the *account* holds, which is a different question from the one
+ * the tables tab asks. Both matter: the tab wants the names a stack published,
+ * and a delete wants what is actually there — including a table that outlived
+ * the stack that named it, which is exactly the leftover the run has to report.
+ */
+export async function listTables(
+  prefix: string,
+  ctx: Partial<AwsContext> = {},
+): Promise<string[]> {
+  const names: string[] = [];
+  let start: string | undefined;
+
+  do {
+    const page = await awsJson<ListTablesResponse>(
+      [
+        "dynamodb",
+        "list-tables",
+        ...(start ? ["--exclusive-start-table-name", start] : []),
+      ],
+      { ...ctx, optional: true },
+    );
+    for (const name of page?.TableNames ?? []) {
+      if (name.startsWith(prefix)) names.push(name);
+    }
+    start = page?.LastEvaluatedTableName;
+  } while (start);
+
+  return names.sort();
+}

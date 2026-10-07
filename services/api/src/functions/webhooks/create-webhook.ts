@@ -22,7 +22,7 @@ import {
 } from '../../lib/http';
 import { createWebhook, requireEvents, requireWebhookUrl, toWebhook } from '../../lib/webhooks';
 
-async function main(event: ApiEvent): Promise<Webhook> {
+async function main(event: ApiEvent): Promise<RouteResponse> {
   const viewer = await requireViewer(event);
   const projectId = pathParam(event, 'projectId');
   // Checked before the body is read, so a caller who may not write here is

@@ -356,8 +356,15 @@ function DeletedCard({ run }: { run: NonNullable<DeployState["run"]> }) {
   // config file deletes just as cleanly, and the card should not claim to have
   // removed one — and whether the data went is which plan this run had, not
   // something the page has to remember about the tick somebody pressed.
+  //
+  // `tables` is the marker for the second question because the data steps are
+  // **in the plan or not**, never in it behind a flag: `buildDestroyPlan` pushes
+  // `tables`, `media`, `pool`, `log-groups` and the credential only when it was
+  // asked for them, and the reporting step is the other half of the same
+  // decision — `remaining` enumerates what a redeploy of this name will hit,
+  // `left` says what is still pointed here.
   const removed = run.steps.find((step) => step.id === "config")?.status === "passed";
-  const withData = run.steps.some((step) => step.id === "data");
+  const withData = run.steps.some((step) => step.id === "tables");
 
   return (
     <Card className="border-destructive/25">

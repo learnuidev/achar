@@ -21,12 +21,12 @@ import type { AwsIntegrationView } from "@/lib/types";
  *
  * **It has to draw with nothing set up.** A checkout where nobody has installed
  * the CLI, no credentials have been configured and nothing has ever been
- * deployed is not an error state — it is the state of the machine the console
- * is most nearly useless on, and so the one where it has to say the most. Which
- * is why the CLI is a row rather than a precondition, why the region is shown
- * even when the account cannot be read, and why each empty list below carries
- * the reason it is empty: without that, "no stacks" and "the credential expired"
- * are the same screen.
+ * deployed is not an error state — it is the state of the machine the console is
+ * most nearly useless on, and so the one where it has to say the most. Which is
+ * why the CLI is a row rather than a precondition, why the region is shown even
+ * when the account cannot be read, and why each empty list carries the reason it
+ * is empty: without that, "no stacks" and "the credential expired" are the same
+ * screen.
  *
  * The console only ever *reads* AWS. Every call in `server/aws.ts` is a
  * `describe`, a `list` or a `get`; the writes are all in `infra/` and reachable
@@ -72,13 +72,15 @@ export function AwsView() {
  */
 function Account({ aws }: { aws: AwsIntegrationView }) {
   const identity = aws.identity;
+  /** Why the account could not be read at all, or null when it could. */
+  const unread = nothingWasRead(aws);
 
   return (
     <>
       <Card>
         <CardHeading
           title="The CLI"
-          hint="Every read on every page is this binary with the profile above — there is no SDK client anywhere in this app, so that the console and a deploy can never resolve credentials two different ways."
+          hint="Every read on every page is this binary, with the profile below and nothing else — there is no SDK client anywhere in this app, so the console and a deploy can never resolve credentials two different ways."
           action={
             <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 font-mono text-xs">
               <TerminalIcon className="size-3.5" />
@@ -90,7 +92,7 @@ function Account({ aws }: { aws: AwsIntegrationView }) {
         {aws.cli.installed ? (
           <div className="mt-5 flex flex-col">
             <Row label="Version" value={aws.cli.version ?? "an unknown version"} />
-            <Row label="Path" value={aws.cli.path ?? "found, but not as a path"} />
+            <Row label="Path" value={aws.cli.path ?? "not on PATH"} />
           </div>
         ) : (
           <p className="text-destructive mt-5 text-sm leading-relaxed">
@@ -138,58 +140,47 @@ function Account({ aws }: { aws: AwsIntegrationView }) {
           hint="Everything in this account and region that carries the repository's own name. One environment's view of the same account is on the Backends pages, and CDK's nested stacks are kept and labelled rather than filtered out — a name here that nothing else mentions is worth being able to see."
         />
 
-        <div className="mt-5 flex flex-col gap-6">
-          <Section title="CloudFormation stacks" count={aws.stacks.length}>
-            {aws.stacks.length > 0 ? (
-              aws.stacks.map((stack) => (
-                <div
-                  key={stack.name}
-                  className="border-border/40 flex items-center gap-3 border-t py-2 text-xs"
-                >
-                  <Dot tone={stack.healthy ? "ok" : "warn"} />
-                  <span className="truncate font-mono">{stack.name}</span>
-                  {stack.nested ? <Chip tone="muted">nested</Chip> : null}
-                  <span className="text-muted-foreground ml-auto shrink-0 font-mono">
-                    {stack.status}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <Note
-                text={whyEmpty(
-                  aws,
-                  "No Achar stacks in this account and region yet. An environment that has been deployed has five.",
-                )}
-              />
-            )}
-          </Section>
+        {unread ? (
+          <p className="text-destructive mt-5 text-sm leading-relaxed">{unread}</p>
+        ) : (
+          <div className="mt-5 flex flex-col gap-6">
+            <Section title="CloudFormation stacks" count={aws.stacks.length}>
+              {aws.stacks.length > 0 ? (
+                aws.stacks.map((stack) => (
+                  <div
+                    key={stack.name}
+                    className="border-border/40 flex items-center gap-3 border-t py-2 text-xs"
+                  >
+                    <Dot tone={stack.healthy ? "ok" : "warn"} />
+                    <span className="truncate font-mono">{stack.name}</span>
+                    {stack.nested ? <Chip tone="muted">nested</Chip> : null}
+                    <span className="text-muted-foreground ml-auto shrink-0 font-mono">
+                      {stack.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <Note text="No Achar stacks in this account and region yet. A deployed environment has five." />
+              )}
+            </Section>
 
-          <Section title="DynamoDB tables" count={aws.tables.length}>
-            {aws.tables.length > 0 ? (
-              <Names names={aws.tables} />
-            ) : (
-              <Note
-                text={whyEmpty(
-                  aws,
-                  "No achar- tables in this account and region yet. An environment that owns its data creates ten.",
-                )}
-              />
-            )}
-          </Section>
+            <Section title="DynamoDB tables" count={aws.tables.length}>
+              {aws.tables.length > 0 ? (
+                <Names names={aws.tables} />
+              ) : (
+                <Note text="No tables named achar-… in this account and region yet. An environment that owns its data creates ten." />
+              )}
+            </Section>
 
-          <Section title="S3 buckets" count={aws.buckets.length}>
-            {aws.buckets.length > 0 ? (
-              <Names names={aws.buckets} />
-            ) : (
-              <Note
-                text={whyEmpty(
-                  aws,
-                  "No achar- buckets in this account and region yet. An environment that owns its media creates one for assets.",
-                )}
-              />
-            )}
-          </Section>
-        </div>
+            <Section title="S3 buckets" count={aws.buckets.length}>
+              {aws.buckets.length > 0 ? (
+                <Names names={aws.buckets} />
+              ) : (
+                <Note text="No buckets named achar-… in this account and region yet. An environment that owns its media creates one, for assets." />
+              )}
+            </Section>
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -271,20 +262,23 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Why a list is empty, which is the one thing this page must not get wrong.
+ * Why the account could not be read, which is the one thing this page must not
+ * get wrong.
  *
- * Three lists are empty in three different situations — nobody has deployed
+ * Three empty lists happen in three different situations — nobody has deployed
  * here, credentials could not be read, and the CLI is not installed at all — and
- * they arrive as the same empty array. So the reason is asked for first, and
- * "nothing here yet" is only said when the reads actually happened: it is a
- * sentence about the account, and it is a lie about the machine.
+ * they arrive from the server as the same empty arrays. So the reason is asked
+ * for once, above all three: "nothing here yet" is a sentence about the account,
+ * and it is a lie about the machine. Asked once rather than inside each list
+ * because an unreadable account makes all three empty, and the same sentence
+ * three times is not three facts.
  */
-function whyEmpty(aws: AwsIntegrationView, nothing: string): string {
+function nothingWasRead(aws: AwsIntegrationView): string | null {
   if (!aws.cli.installed) {
     return "Nothing could be listed: there is no aws on this machine's PATH.";
   }
   if (!aws.identity) {
     return `Nothing could be listed: ${aws.identityError ?? "the account could not be read."}`;
   }
-  return nothing;
+  return null;
 }

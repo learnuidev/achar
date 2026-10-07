@@ -30,16 +30,16 @@ export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
 
   if (isTokenViewer(viewer)) {
-    // The token's own row is the credential, and a revoked one no longer has a
-    // row to read: a bearer that resolved a moment ago and is gone now is not a
-    // caller this route can describe.
+    // A token's row is the credential, and a row that is gone — the project's
+    // cascade removes them — is not a caller this route can describe, so the
+    // answer is the same 401 a missing bearer gets.
     const token = await getToken(viewer.token.projectId, viewer.token.tokenId);
     if (!token) throw new HttpError(401, 'UNAUTHORIZED', 'Unauthorized');
 
     const asToken: Profile = {
       userId: viewer.token.tokenId,
-      // A token has no address of its own — the caller's identity is the
-      // credential, which is what `userId` above names.
+      // The token has no address: `userId` above is the credential, and an empty
+      // string is the honest answer rather than the address of whoever made it.
       email: '',
       name: token.name,
       createdAt: token.createdAt,

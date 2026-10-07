@@ -7,13 +7,13 @@
  * same reads, later, in a shape that can disagree with itself while it loads.
  */
 
-import type { ListResponse, Webhook } from '@achar/types';
+import type { Webhook } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
 import { pathParam, withHandler, type ApiEvent } from '../../lib/http';
 import { listDeliveries, listWebhooks, toWebhook } from '../../lib/webhooks';
 
-async function main(event: ApiEvent): Promise<ListResponse<Webhook>> {
+async function main(event: ApiEvent): Promise<Webhook[]> {
   const viewer = await requireViewer(event);
   const projectId = pathParam(event, 'projectId');
   await requireProjectAccess(projectId, viewer, 'read');
@@ -26,9 +26,9 @@ async function main(event: ApiEvent): Promise<ListResponse<Webhook>> {
     items.push(toWebhook(hook, deliveries[0]));
   }
 
-  // One page, whole: a project holds a handful of webhooks, so a next token here
-  // would cost every client a loop for a list it draws in full anyway.
-  return { items, nextToken: null };
+  // A bare array: a project holds a handful of webhooks, and the client over
+  // this API reads the list as `Webhook[]`.
+  return items;
 }
 
 export const handler = withHandler(main);

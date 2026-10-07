@@ -55,6 +55,16 @@ export interface ServicesState {
  */
 const MAX_LINES = 400;
 
+/**
+ * The one app whose Start and Stop are refused.
+ *
+ * Mirrored from `CONSOLE_APP` in `server/repo.ts` because a client component
+ * cannot import that module — it reads the filesystem to find the repository
+ * root. The server is still the side that refuses; this is what lets a card say
+ * *why* instead of rendering a button whose only outcome is a 409.
+ */
+export const SELF_APP: AppKey = "console";
+
 export function useServices(app?: AppKey): ServicesState {
   const [services, setServices] = useState<ServiceView[]>([]);
   const [occupied, setOccupied] = useState<number[]>([]);

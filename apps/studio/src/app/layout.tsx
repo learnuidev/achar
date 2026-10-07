@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-svh bg-background text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {config ? (
-            <AuthProvider>
+            <AuthProvider config={config}>
               <StudioGate apiUrl={config.apiUrl}>{children}</StudioGate>
             </AuthProvider>
           ) : (

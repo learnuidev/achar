@@ -7,6 +7,7 @@ import { ArrowLeftIcon, RefreshCwIcon } from "lucide-react";
 import { ChecklistView } from "@/components/backends/checklist-view";
 import { LogsView } from "@/components/backends/logs-view";
 import { TablesView } from "@/components/backends/tables-view";
+import { DeployAction } from "@/components/deploy/deploy-action";
 import { EnvironmentCard } from "@/components/deploy/environment-card";
 import { useDeploy, type DeployState } from "@/components/deploy/use-deploy";
 import { DeployView } from "@/components/deploy/deploy-view";
@@ -37,14 +38,14 @@ import type { BackendEnvView, DeploymentHistoryView, EnvironmentView } from "@/l
  * land on the same view, and `replace`d rather than `pushed` so the back button
  * still leaves the page rather than walking the strip.
  *
- * **The card at the top is the page's header.** The environment, its state, the
- * account it lands in, the five stacks and their condition, and the one button
- * that deploys it are one thing, and the console already draws that thing as
- * `EnvironmentCard` — so a hand-rolled heading here would be a second, drifting
- * answer to "what is this environment". The Deployments tab is handed that same
- * card's absence through `embedded`: it is below a card that already names the
- * environment and carries its button, and two of them on one screen is one too
- * many.
+ * **The card under the chrome is the page's header.** The environment, its
+ * state, the account it lands in, the five stacks and their condition are one
+ * thing, and the console already draws that thing as `EnvironmentCard` — so a
+ * hand-rolled heading here would be a second, drifting answer to "what is this
+ * environment". It is drawn on every tab **except Deployments**: that tab is
+ * `DeployView`, which draws the same card itself, and two of them on one screen
+ * is one too many. The Deploy button above stays on every tab, because it is
+ * what starts the run those tabs are about.
  *
  * There is deliberately no 404 here, unlike `/frontends/<app>`. The set of
  * frontends is four names the console knows; the set of environments is open,
@@ -52,7 +53,7 @@ import type { BackendEnvView, DeploymentHistoryView, EnvironmentView } from "@/l
  * page for — the Deployments tab is how it stops not existing.
  */
 export function BackendView({ stage }: { stage: string }) {
-  const { state, runs } = useShell();
+  const { state, runs, refreshRuns } = useShell();
   const nameStage = useNameStage();
   // The tab lives in the URL rather than in this component: `?tab=logs` is what a
   // reload, the back button and a link somebody is sent all have in common.
@@ -67,9 +68,10 @@ export function BackendView({ stage }: { stage: string }) {
   /**
    * This environment's run — one instance for the whole page.
    *
-   * The card's Deploy button and the Deployments tab's checklist are the same
-   * run: a hook per component would be two streams, and pressing the button
-   * would leave the checklist behind it waiting for a run it never hears about.
+   * The header carries the Deploy button, and the Deployments tab draws the run
+   * it starts, so the two have to be the *same* run: a hook per component would
+   * be two streams, and pressing the button would leave the checklist behind it
+   * waiting for a run it never hears about.
    */
   const deploy = useDeploy(stage);
 
@@ -88,20 +90,55 @@ export function BackendView({ stage }: { stage: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <Link
-          href="/backends"
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 text-xs transition-colors"
-        >
-          <ArrowLeftIcon className="size-3.5" />
-          Backends
-        </Link>
+        {/* The chrome: where you came from, and the one control the whole page
+            exists to offer. The button is `DeployAction`, the same component the
+            deploy page draws — one place that decides the primary variant, the
+            rocket and the label — and it is driven by this page's `useDeploy`,
+            so the run it starts is the run the Deployments tab then streams. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/backends"
+            className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1.5 text-xs transition-colors"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            Backends
+          </Link>
 
-        <EnvironmentCard
-          stage={stage}
-          environment={environment}
-          state={state}
-          activity={running?.action ?? null}
-        />
+          <div className="ml-auto flex flex-col items-end gap-1">
+            <DeployAction
+              stage={stage}
+              // The press, and then the console's own list of what is running:
+              // the chip on the card comes from that list, and without the nudge
+              // it would take its next scheduled read — up to fifteen seconds —
+              // to say "deploying" about a run that is already going.
+              onDeploy={() => {
+                void deploy.start({ stage }).then(() => refreshRuns());
+              }}
+              busy={deploy.starting}
+              disabled={running !== null}
+              title={
+                running
+                  ? `A ${running.action === "destroy" ? "delete" : "deploy"} is already running against ${stage}`
+                  : `Deploy ${stage} — the same plan the Deployments tab runs`
+              }
+            />
+            {/* The refusal goes beside the button that produced it. On the
+                Deployments tab the page's own banner says the same thing, and
+                one sentence twice is worse than once. */}
+            {deploy.error && tab !== "deployments" ? (
+              <span className="text-destructive max-w-64 text-right text-xs">{deploy.error}</span>
+            ) : null}
+          </div>
+        </div>
+
+        {tab === "deployments" ? null : (
+          <EnvironmentCard
+            stage={stage}
+            environment={environment}
+            state={state}
+            activity={running?.action ?? null}
+          />
+        )}
       </div>
 
       <Tabs tabs={BACKEND_TABS} value={tab} onChange={select} />
@@ -257,8 +294,10 @@ function DeploymentsTab({ stage, deploy }: { stage: string; deploy: DeployState 
       {/* The checklist is the console's whole reason for existing, so it is
           rendered here rather than summarised — this tab *is* the deploy page,
           and the environment it runs against is the one in the URL. `embedded`
-          is what keeps it from drawing the environment card a second time: the
-          page above already drew it. */}
+          is what tells it this is a tab and not a page of its own: the header
+          above belongs to the page, and a second one here would be a second
+          title for the same screen. DeployView draws the environment card
+          itself, which is why the header above skips its own on this tab. */}
       <DeployView stage={stage} deploy={deploy} embedded />
 
       <Card>

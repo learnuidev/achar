@@ -63,15 +63,23 @@ export function listDocuments(
   );
 }
 
-/** One document, at one perspective. */
+/**
+ * One document, at one perspective.
+ *
+ * The perspective is accepted either bare or wrapped, because it is the one thing
+ * a read of a document varies by: `getDocument(p, d, id, 'raw')` is what almost
+ * every caller writes, and the object form is there for the options that will
+ * accumulate around it rather than being a tax on every call today.
+ */
 export function getDocument(
   api: ApiContext,
   projectId: string,
   dataset: string,
   documentId: string,
-  options: GetDocumentOptions = {},
+  perspective?: Perspective | GetDocumentOptions,
 ): Promise<AcharDocument> {
-  const search = queryString({ perspective: options.perspective });
+  const options = typeof perspective === 'string' ? { perspective } : perspective;
+  const search = queryString({ perspective: options?.perspective });
   return api.get<AcharDocument>(
     `/v1/data/doc/${projectId}/${dataset}/${segment(documentId)}${search}`,
   );

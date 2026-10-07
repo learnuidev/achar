@@ -9,6 +9,8 @@ import { listTokens, toApiToken } from '../../lib/tokens';
  * Revoked tokens are in the list and carry their `revokedAt`: a list that hid
  * them would make "did somebody take this away, and when" unanswerable from the
  * screen that took it away, which is the one question a revocation raises.
+ *
+ * A bare array, like the other lists a project holds a handful of.
  */
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
@@ -17,5 +19,5 @@ export const handler = withHandler(async (event) => {
   await requireProjectAccess(projectId, viewer, 'admin');
 
   const tokens = await listTokens(projectId);
-  return { items: tokens.map(toApiToken), nextToken: null };
+  return tokens.map(toApiToken);
 });

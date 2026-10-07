@@ -7,17 +7,40 @@ import { Hub } from 'aws-amplify/utils';
 
 import { AuthContext, type AuthContextValue } from './lib/context';
 import { configureAuth, getAccessToken } from './lib/amplify';
-import type { AcharAuthConfig } from './lib/config';
+import { authConfigFromEnv, type AcharAuthConfig } from './lib/config';
 
 /**
  * The session, for everything under it.
+ *
+ * `config` may be passed by hand — a test, a preview deployment, a console
+ * starting an app against an environment it has just created — or left off, in
+ * which case it comes from the `NEXT_PUBLIC_*` variables the app was built with.
+ * That is why this is two components: the choice between "configured" and
+ * "nothing to configure with" happens before any hook runs, so neither branch
+ * breaks the order hooks have to be called in.
+ */
+export function AuthProvider({
+  config,
+  children,
+}: {
+  config?: AcharAuthConfig;
+  children: React.ReactNode;
+}) {
+  const resolved = config ?? authConfigFromEnv();
+  if (!resolved) return <AuthNotConfigured />;
+
+  return <SessionProvider config={resolved}>{children}</SessionProvider>;
+}
+
+/**
+ * The session, once there is a pool to read it from.
  *
  * The viewer is read from the ID token rather than fetched from the API: every
  * screen that draws "your" content needs the caller's id before it can ask for
  * anything, and a round trip to learn what the token already says is a round trip
  * that can fail on its own.
  */
-export function AuthProvider({
+function SessionProvider({
   config,
   children,
 }: {
@@ -79,6 +102,36 @@ export function AuthProvider({
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * What an app renders when it has no user pool to point at.
+ *
+ * Drawn here rather than left to each app because the variables are this
+ * package's: an app that had to know which of them are required would be an app
+ * with a second copy of `authConfigFromEnv`, and the two would drift. An app with
+ * its own setup screen passes a `config` and never sees this.
+ */
+function AuthNotConfigured() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-8 text-card-foreground shadow-sm">
+        <h1 className="text-lg font-semibold tracking-tight">Sign-in is not configured</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Set these in <code className="font-mono text-xs">.env.local</code> and restart the
+          dev server:
+        </p>
+        <ul className="mt-3 space-y-1 font-mono text-xs text-muted-foreground">
+          <li>NEXT_PUBLIC_ACHAR_REGION</li>
+          <li>NEXT_PUBLIC_ACHAR_USER_POOL_ID</li>
+          <li>NEXT_PUBLIC_ACHAR_USER_POOL_CLIENT_ID</li>
+        </ul>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Google sign-in additionally needs NEXT_PUBLIC_ACHAR_AUTH_DOMAIN.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 /**

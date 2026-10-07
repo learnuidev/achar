@@ -15,6 +15,7 @@ import type {
   Member,
   MutationRequest,
   MutationResponse,
+  Perspective,
   Profile,
   Project,
   ProjectRole,
@@ -222,9 +223,9 @@ export class AcharClient {
     projectId: string,
     dataset: string,
     documentId: string,
-    options?: documents.GetDocumentOptions,
+    perspective?: Perspective | documents.GetDocumentOptions,
   ): Promise<AcharDocument> {
-    return documents.getDocument(this.context, projectId, dataset, documentId, options);
+    return documents.getDocument(this.context, projectId, dataset, documentId, perspective);
   }
 
   mutate(

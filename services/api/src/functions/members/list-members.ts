@@ -10,7 +10,7 @@
  * project reached with a token, which is the row of whoever issued it.
  */
 
-import type { ListResponse, Member } from '@achar/types';
+import type { Member } from '@achar/types';
 import { requireProjectAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
 import { pathParam, withHandler } from '../../lib/http';
@@ -23,12 +23,9 @@ export const handler = withHandler(async (event) => {
   await requireProjectAccess(projectId, viewer, 'read');
 
   const rows = await listMembers(projectId);
-  // A roster is read whole: it is bounded by how many people share a project,
-  // and a page of it would be a screen that cannot answer what it is for.
-  const members: ListResponse<Member> = {
-    items: rows.map((row) => toApiMember(row, viewer.userId)),
-    nextToken: null,
-  };
+  // A bare array, because a roster is read whole: it is bounded by how many
+  // people share a project, and the client over this API reads it as `Member[]`.
+  const members: Member[] = rows.map((row) => toApiMember(row, viewer.userId));
 
   return members;
 });

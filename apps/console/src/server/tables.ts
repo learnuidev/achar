@@ -135,6 +135,9 @@ export async function backendTables(
   stage: string,
   ctx: Partial<AwsContext> = {},
 ): Promise<TableSummaryList> {
+  // The same read `stageTableNames` makes, and deliberately not *through* it:
+  // this one needs the logical ids, which a list of physical names has already
+  // thrown away, and calling both would describe the stack twice to get them.
   const stack = await describeStack(dataStackName(stage), ctx);
   const entries = tableEntries(stack?.outputs ?? {});
 

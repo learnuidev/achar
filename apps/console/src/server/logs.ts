@@ -171,7 +171,13 @@ export async function recentLogs(
   ctx: { profile?: string; region?: string } = {},
 ): Promise<BackendLogs> {
   const { fn } = query;
-  const minutes = query.minutes ?? 60;
+  // The window arrives in a query string, so a value that is not a number of
+  // minutes is the default rather than a `--start-time NaN` the CLI refuses —
+  // the same rule `rangeFor` applies to the metrics window.
+  const minutes =
+    typeof query.minutes === "number" && Number.isFinite(query.minutes) && query.minutes > 0
+      ? query.minutes
+      : 60;
   const limit = query.limit ?? 200;
   const startTime = Date.now() - minutes * 60_000;
 

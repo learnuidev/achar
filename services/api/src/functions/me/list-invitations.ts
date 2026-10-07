@@ -12,7 +12,7 @@
  * project the caller cannot otherwise see.
  */
 
-import type { Invitation, ListResponse } from '@achar/types';
+import type { Invitation } from '@achar/types';
 import { isTokenViewer, requireViewer } from '../../lib/auth';
 import { withHandler } from '../../lib/http';
 import { listInvitationsForEmail } from '../../lib/members';
@@ -22,7 +22,7 @@ export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
 
   if (isTokenViewer(viewer)) {
-    const none: ListResponse<Invitation> = { items: [], nextToken: null };
+    const none: Invitation[] = [];
     return none;
   }
 
@@ -46,7 +46,8 @@ export const handler = withHandler(async (event) => {
     });
   }
 
-  // The whole set comes back from one query, so there is no next page to name.
-  const invitations: ListResponse<Invitation> = { items, nextToken: null };
-  return invitations;
+  // A bare array rather than a page: the whole set arrives from one query, and
+  // the client over this API reads it as `Invitation[]` — a `nextToken` that is
+  // always null is a field every caller would have to know to ignore.
+  return items;
 });

@@ -75,7 +75,7 @@ export function useDocument(
   perspective: Perspective,
 ): Resource<AcharDocument> {
   return useResource(`document:${projectId}/${dataset}/${documentId}:${perspective}`, (client) =>
-    client.getDocument(projectId, dataset, documentId, perspective),
+    client.getDocument(projectId, dataset, documentId, { perspective }),
   );
 }
 
@@ -118,8 +118,8 @@ export function useDocumentPair(
       if (skip) return { shown: null, published: null, hasDraft: false };
 
       const [shown, raw] = await Promise.all([
-        readOr404(client.getDocument(projectId, dataset, documentId, 'previewDrafts')),
-        readOr404(client.getDocument(projectId, dataset, documentId, 'raw')),
+        readOr404(client.getDocument(projectId, dataset, documentId, { perspective: 'previewDrafts' })),
+        readOr404(client.getDocument(projectId, dataset, documentId, { perspective: 'raw' })),
       ]);
 
       return {

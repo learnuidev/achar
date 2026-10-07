@@ -8,6 +8,7 @@ import {
   getIdentity,
   identityError,
   listBuckets,
+  listTables,
   rootStackNames,
   stackLabel,
 } from "./aws";
@@ -29,7 +30,6 @@ import {
   type StageOutputs,
 } from "./environments";
 import { applyAuthUrls, googleSecretStatus } from "./settings";
-import { stageTableNames } from "./tables";
 import { cdkBin, repoPath, APPS, type AppDefinition } from "./repo";
 import { display, lastMeaningfulLines, run, type PipedChild } from "./exec";
 
@@ -1571,7 +1571,11 @@ function tablesStep(): PlanStep {
       "Every table this environment created, deleted and waited for. A table is `RemovalPolicy.RETAIN`, so `cdk destroy` leaves it behind on purpose — and a table left behind is what stops a redeploy of the same name at early validation, holding a name the new stack wants.",
     timeoutMs: 30 * 60_000,
     apply: async (ctx) => {
-      const names = await stageTableNames(ctx.stage, { profile: ctx.profile, region: ctx.region });
+      // The account, not the stack: the Data stack that published these names
+      // went in step three, and a table that outlived it is precisely what this
+      // step is for. The captured outputs are added because they are the only
+      // place a name exists at all if the table has since been removed by hand.
+      const names = await tablesOf(ctx);
       if (names.length === 0) {
         return { note: "there are no tables named for this stage", status: "skipped" };
       }
@@ -1899,6 +1903,35 @@ function logGroupsStep(): PlanStep {
   };
 }
 
+/**
+ * Every table of this stage that is in the account right now.
+ *
+ * Two sources, because they can disagree and both are true. The **account** is
+ * asked by name prefix — `achar-<stage>-<kebab-of-id>`, which is the rule
+ * `infra/src/naming.ts` names every table by — and that is what finds a table
+ * whose stack has gone. The run's **captured outputs** are added because they are
+ * the physical names a Data stack published, which is the only place a name is
+ * written down at all if the table has since been deleted by hand.
+ *
+ * Deliberately not `stageTableNames`, which is the tables tab's source: that
+ * reads the Data stack, and by the time a delete asks this question the stack it
+ * would read has already been destroyed. That is not a detail — it is the
+ * difference between a delete that removes ten tables and one that reports there
+ * were none.
+ */
+async function tablesOf(ctx: StepContext): Promise<string[]> {
+  const names = new Set(
+    await listTables(`achar-${ctx.stage}-`, { profile: ctx.profile, region: ctx.region }).catch(
+      () => [],
+    ),
+  );
+
+  const outputs = ctx.data.outputs as StageOutputs | null;
+  for (const name of Object.values(outputs?.tables ?? {})) names.add(name);
+
+  return [...names].sort();
+}
+
 async function logGroupsOf(ctx: StepContext): Promise<string[]> {
   const names: string[] = [];
   let next: string | undefined;
@@ -2043,10 +2076,7 @@ function remainingStep(stage: string): PlanStep {
       // the step that hit it rather than reconstructed here.
       const lines: string[] = readLeft(ctx);
 
-      const tables = await stageTableNames(stage, {
-        profile: ctx.profile,
-        region: ctx.region,
-      }).catch(() => []);
+      const tables = await tablesOf(ctx).catch(() => []);
       if (tables.length > 0) {
         lines.push(
           `${tables.length} tables are still there (${listNames(tables)}) — a redeploy creates the same names, and CloudFormation refuses a table that already exists`,

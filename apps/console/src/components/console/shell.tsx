@@ -65,7 +65,7 @@ const NAV = [
      * number written into prose has nothing keeping it true: this line said "the
      * three apps" for as long as it took somebody to add a fourth.
      */
-    hint: `the ${FRONTENDS.length} apps, and where they run`,
+    hint: `the ${FRONTENDS.length} apps, started against an environment`,
   },
 ] as const;
 
@@ -250,12 +250,12 @@ function NavItem({
 /**
  * The identity, in the corner of every page.
  *
- * **The CLI is asked about before the credentials are shown**, because a machine
- * with no `aws` at all and a machine whose SSO session has lapsed are the same
- * dead card otherwise — and the first thing somebody does about one of them is
- * not the first thing they do about the other. `loading` is passed in rather
- * than read from the state, which is `null` while the first read is in flight
- * and again after one that failed for a reason the bar is already showing.
+ * **The CLI is a line of its own**, below the account, because a machine with no
+ * `aws` at all and a machine whose SSO session has lapsed are the same dead card
+ * otherwise — and the two want different things done about them. `loading` is a
+ * prop rather than something read from the state, which is `null` both while the
+ * first read is in flight and after one that failed for a reason the bar is
+ * already showing.
  */
 function Identity({ loading }: { loading: boolean }) {
   const { state } = useShell();
@@ -269,7 +269,12 @@ function Identity({ loading }: { loading: boolean }) {
         AWS
         {identity ? <Dot tone="ok" className="ml-auto" /> : <Dot tone="bad" className="ml-auto" />}
       </div>
-      <p className="truncate font-mono text-xs">{state?.profile ?? "…"}</p>
+      <p
+        className="truncate font-mono text-xs"
+        title={state ? `profile from ${state.profileSource}` : undefined}
+      >
+        {state?.profile ?? "…"}
+      </p>
 
       {identity ? (
         <p className="text-muted-foreground truncate text-xs" title={identity.arn}>
@@ -281,12 +286,12 @@ function Identity({ loading }: { loading: boolean }) {
         </p>
       )}
 
-      <p className="text-muted-foreground/80 truncate text-xs" title={cli?.path ?? undefined}>
-        {cli && !cli.installed
-          ? "no aws CLI on PATH"
-          : state
-            ? `profile from ${state.profileSource}`
-            : "Reading the CLI…"}
+      <p className="text-muted-foreground/80 truncate text-xs">
+        {cli
+          ? cli.installed
+            ? `aws-cli ${cli.version ?? "an unknown version"}`
+            : "no aws CLI on PATH"
+          : "Reading the CLI…"}
       </p>
     </div>
   );

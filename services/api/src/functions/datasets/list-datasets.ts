@@ -8,9 +8,9 @@ import { pathParam, withHandler } from '../../lib/http';
  *
  * Answered whole rather than paged: a project holds a handful of them, every
  * screen that asks for this list draws all of it, and a page boundary in the
- * middle of a sidebar is a sidebar that has to fetch again to be complete. So
- * `nextToken` is always null — the shape of `ListResponse` is kept, the paging
- * is not.
+ * middle of a sidebar is a sidebar that has to fetch again to be complete. A
+ * bare array rather than a page, which is also what the client over this API
+ * reads it as.
  */
 export const handler = withHandler(async (event) => {
   const viewer = await requireViewer(event);
@@ -19,5 +19,5 @@ export const handler = withHandler(async (event) => {
   await requireProjectAccess(projectId, viewer, 'read');
 
   const datasets = await listDatasets(projectId);
-  return { items: datasets.map(toDataset), nextToken: null };
+  return datasets.map(toDataset);
 });

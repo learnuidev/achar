@@ -578,15 +578,19 @@ export async function portInUse(port: number): Promise<boolean> {
 }
 
 /**
- * Every app port something is listening on.
+ * Every app port something is listening on, except the console's own.
  *
- * The route subtracts the ports of services this console is holding, because a
- * dev server the console started is on its port for the right reason and saying
- * otherwise would put a warning on a card that is working.
+ * 3002 is always in use when somebody is reading this — by the process serving
+ * the request — so reporting it as occupied would put "something the console did
+ * not start" on the one card whose app cannot be started at all. Leaving it out
+ * is not hiding a fact: `refuseConsole` is what answers for that app, and it
+ * answers with the reason.
  */
 export async function occupiedPorts(): Promise<number[]> {
   const results = await Promise.all(
-    APPS.map(async (app) => ((await portInUse(app.port)) ? app.port : null)),
+    APPS.filter((app) => app.key !== CONSOLE_APP).map(async (app) =>
+      (await portInUse(app.port)) ? app.port : null,
+    ),
   );
   return results.filter((port): port is number => port !== null);
 }
