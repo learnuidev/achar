@@ -46,9 +46,9 @@ export function ProjectCard({ project }: { project: Project }) {
             </span>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            {project.organizationName} · created {formatDate(project.createdAt)}
-          </p>
+          {/* The organization is the heading this card sits under, so it is not
+              repeated on the card — see the picker's `groupByOrganization`. */}
+          <p className="text-xs text-muted-foreground">Created {formatDate(project.createdAt)}</p>
         </CardContent>
       </Card>
     </Link>

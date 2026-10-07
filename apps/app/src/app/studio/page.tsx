@@ -3,24 +3,33 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FolderPlusIcon, LayersIcon } from 'lucide-react';
+import type { Project } from '@achar/types';
 import { Button, Card, CardContent, Skeleton } from '@achar/ui';
 import { AppPage } from '@/components/studio/app-header';
 import { CreateProjectDialog } from '@/components/studio/create-project-dialog';
+import { DeleteOrganizationDialog } from '@/components/studio/delete-organization-dialog';
 import { PendingInvitations } from '@/components/studio/pending-invitations';
 import { ProjectCard } from '@/components/studio/project-card';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { useInvitations, useProjects } from '@/hooks/use-projects';
+import { canAdmin } from '@/lib/roles';
 import { routes } from '@/lib/routes';
 
 /**
- * The front door: every project you can open, and the two ways to get another.
+ * The front door: every project you can open, gathered by who they belong to, and
+ * the two ways to get another.
  *
  * This is what `/` is in the studio, because a studio has no public face — the
  * first question is always "which content", and a marketing page in front of
  * that question is a page everybody clicks past once. Invitations come first
  * because they are addressed to somebody who is not in any of the projects
  * below, and an offer is easy to lose under a grid.
+ *
+ * The grouping is the organization, which is a field on each project rather than a
+ * row anywhere — so a heading here is a set of projects that name the same
+ * organization, and the one act that belongs at that level is ending all of them.
+ * See `groupByOrganization`.
  *
  * `?view=new-project` arrives with the form up. The query is an instruction spent
  * on arrival, so it is dropped from the URL as soon as it has been obeyed: left
@@ -89,9 +98,27 @@ export default function ProjectPickerPage() {
           }
         />
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2">
-          {(projects.data ?? []).map((project) => (
-            <ProjectCard key={project.projectId} project={project} />
+        <div className="space-y-8">
+          {groupByOrganization(projects.data ?? []).map((group) => (
+            <section key={group.name} className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-medium text-muted-foreground">{group.name}</h2>
+                {/* Only when every project under this heading is one this person
+                    may delete — see `groupByOrganization`. */}
+                {group.deletable && (
+                  <DeleteOrganizationDialog
+                    organization={group.name}
+                    projects={group.projects}
+                    onDeleted={projects.refresh}
+                  />
+                )}
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {group.projects.map((project) => (
+                  <ProjectCard key={project.projectId} project={project} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -103,4 +130,47 @@ export default function ProjectPickerPage() {
       </p>
     </AppPage>
   );
+}
+
+/** One organization's projects, and whether this person may end all of them. */
+interface OrganizationGroup {
+  name: string;
+  projects: Project[];
+  deletable: boolean;
+}
+
+/**
+ * The projects, gathered by the organization each one names.
+ *
+ * An organization is not a row anywhere in this API: `organizationName` is a field
+ * on a project, and this is a grouping over those fields and nothing more. Two
+ * projects that name the same organization sit under one heading, which is where
+ * ending all of them at once belongs.
+ *
+ * **`deletable` is every project in the group, not any of them.** An organization
+ * delete walks the group one request at a time, so an admin of half of it would
+ * either stop at the first 403 or leave an organization standing with fewer
+ * projects than it had — and a destructive action that half-succeeds silently is
+ * worse than one that is not offered. The projects they do administer are still
+ * deletable from their own pages.
+ *
+ * Alphabetical by organization, and the projects inside a group in the order the
+ * API answered with. A project that names no organization gets its own heading
+ * rather than being folded under one it does not belong to.
+ */
+function groupByOrganization(projects: Project[]): OrganizationGroup[] {
+  const groups = new Map<string, Project[]>();
+
+  for (const project of projects) {
+    const name = project.organizationName.trim() || 'No organization';
+    groups.set(name, [...(groups.get(name) ?? []), project]);
+  }
+
+  return [...groups.entries()]
+    .map(([name, members]) => ({
+      name,
+      projects: members,
+      deletable: members.every((project) => canAdmin(project.role)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

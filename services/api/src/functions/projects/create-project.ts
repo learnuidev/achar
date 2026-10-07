@@ -2,10 +2,9 @@
  * `POST /v1/projects` — make a project, with the caller as its owner and admin.
  *
  * A token cannot call this. It is a credential scoped to a project that already
- * exists, it carries no identity that could own a new one, and a project whose
- * owner is a machine credential is a project nobody can administer: the owner is
- * the only principal `requireProjectOwner` accepts, so it could never be deleted
- * through this API either.
+ * exists and it carries no identity that could own a new one — and `ownerId` is
+ * not decoration: it is the record of who made the project, which nothing can
+ * rewrite afterwards.
  *
  * `organizationName` defaults to the project's own name, because an organization
  * is a label on the project and a first project that cannot be created without

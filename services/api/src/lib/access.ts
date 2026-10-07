@@ -117,20 +117,27 @@ export async function requireDatasetAccess(
 }
 
 /**
- * Authorizes the one thing only a project's owner may do: delete it.
+ * Authorizes the one thing a role alone must not decide: deleting a project.
  *
- * Ownership is a property of a person, so a token can never hold it — a
- * machine credential that could delete the project it was issued for is a
- * credential worth stealing rather than one worth issuing. An admin who is not
- * the owner is refused here even though `admin` would otherwise pass.
+ * **Any admin of it**, not the owner. A project belongs to the people working in
+ * it rather than to whoever typed the name first: that person leaves, changes
+ * address, or simply stops being the one who looks after this, and a project
+ * whose deletion depends on a single account is a project nobody can get rid of.
+ * The owner keeps no special power here — the role does, as it does everywhere
+ * else in this file.
+ *
+ * A token is refused, and that is about the *kind* of credential rather than its
+ * rank: a token's role is `ADMIN` by design, so a rank check on its own would hand
+ * every machine credential in a project the power to destroy that project. That is
+ * a credential worth stealing rather than one worth issuing, which is the same
+ * reason `create-project` will not let one make a project in the first place.
  */
-export async function requireProjectOwner(
+export async function requireProjectAdmin(
   projectId: string,
   viewer: ApiViewer,
 ): Promise<ProjectAccess> {
-  const access = await requireProjectAccess(projectId, viewer, 'admin');
-  if (viewer.kind === 'token' || access.project.ownerId !== viewer.userId) {
-    throw forbidden('Only the owner can delete this project');
+  if (isTokenViewer(viewer)) {
+    throw forbidden('An API token cannot delete a project');
   }
-  return access;
+  return requireProjectAccess(projectId, viewer, 'admin');
 }

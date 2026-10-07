@@ -7,6 +7,7 @@ import { Button, Card, CardContent, Skeleton } from '@achar/ui';
 import { AppPage } from '@/components/studio/app-header';
 import { CreateDatasetDialog } from '@/components/studio/create-dataset-dialog';
 import { DatasetCard } from '@/components/studio/dataset-card';
+import { ProjectDangerCard } from '@/components/studio/project-danger-card';
 import { ProjectSettingsCard } from '@/components/studio/project-settings-card';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { PageHeader, StatBlock } from '@/components/ui/page-header';
@@ -112,13 +113,18 @@ export default function ProjectPage({ params }: { params: Promise<{ projectId: s
       </section>
 
       {project.data && (
-        <ProjectSettingsCard
-          project={project.data}
-          canAdmin={admin}
-          onSaved={() => {
-            project.refresh();
-          }}
-        />
+        <>
+          <ProjectSettingsCard
+            project={project.data}
+            canAdmin={admin}
+            onSaved={() => {
+              project.refresh();
+            }}
+          />
+          {/* Only an admin is offered it. It is the API's rule as well, and a
+              button that answers 403 teaches the wrong thing about the product. */}
+          {admin && <ProjectDangerCard project={project.data} />}
+        </>
       )}
     </AppPage>
   );

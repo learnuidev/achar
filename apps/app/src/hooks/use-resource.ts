@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AcharClient } from '@achar/api';
-import { errorMessage } from '@/lib/errors';
+import { errorMessage, errorStatus } from '@/lib/errors';
 import { useAcharClient } from '@/components/client-provider';
 
 /**
@@ -82,6 +82,16 @@ export interface Action<Args extends unknown[], T> {
   run: (...args: Args) => Promise<T | null>;
   pending: boolean;
   error: string | null;
+  /**
+   * The HTTP status behind `error`, when the failure came from the API.
+   *
+   * A 404 and a 403 are the same `null` out of `run` and the same kind of sentence
+   * in `error`, and they are different situations: a delete that answers 404 has
+   * already happened, and one that answers 403 has not. The callers that have to
+   * tell those apart are the destructive ones, which is why this is answered here
+   * rather than re-derived from the exception at each of them.
+   */
+  status: number | null;
   reset: () => void;
 }
 
@@ -91,6 +101,7 @@ export function useAction<Args extends unknown[], T>(
   const client = useAcharClient();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<number | null>(null);
 
   const actRef = useRef(act);
   actRef.current = act;
@@ -99,10 +110,12 @@ export function useAction<Args extends unknown[], T>(
     async (...args: Args): Promise<T | null> => {
       setPending(true);
       setError(null);
+      setStatus(null);
       try {
         return await actRef.current(client, ...args);
       } catch (cause: unknown) {
         setError(errorMessage(cause, 'That did not work'));
+        setStatus(errorStatus(cause));
         return null;
       } finally {
         setPending(false);
@@ -111,7 +124,10 @@ export function useAction<Args extends unknown[], T>(
     [client],
   );
 
-  const reset = useCallback(() => setError(null), []);
+  const reset = useCallback(() => {
+    setError(null);
+    setStatus(null);
+  }, []);
 
-  return { run, pending, error, reset };
+  return { run, pending, error, status, reset };
 }

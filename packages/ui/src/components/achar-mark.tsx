@@ -33,7 +33,7 @@ export function AcharMark({ className }: { className?: string }) {
         // logo ends up fetching a 1080-pixel one — on the critical path of every
         // page that has a header.
         sizes="32px"
-        className="h-8 w-auto shrink-0"
+        className="h-16 w-auto shrink-0"
       />
     </span>
   );

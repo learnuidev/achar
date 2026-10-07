@@ -7,10 +7,12 @@
  * The identifier is the address while the offer stands and the caller's id once
  * it has been accepted.
  *
- * The owner is refused. Removing the owner's own row would leave a project that
- * nobody owns, and `requireProjectOwner` is the only way to delete one — so the
- * project would be undeletable through this API by anybody, including the person
- * who removed themselves.
+ * The owner is refused, and it is no longer about who may delete the project —
+ * every admin of it may. It is about what removal costs the person: a membership
+ * row is keyed by the `sub` once it is accepted, so there is no address to invite
+ * back to, and re-entering the project would mean being invited afresh and
+ * accepting again. Removing the person who made a project from its roster is
+ * therefore not undoable here, and nothing asks for it.
  */
 
 import { requireProjectAccess } from '../../lib/access';

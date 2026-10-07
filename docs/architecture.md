@@ -230,7 +230,7 @@ the handler never sees an unauthenticated request at all.
 | GET | `/v1/projects` | any caller | The caller's projects |
 | GET | `/v1/projects/{p}` | members | One project, with the caller's role |
 | PATCH | `/v1/projects/{p}` | admins | Rename, or rewrite the description |
-| DELETE | `/v1/projects/{p}` | owner | Delete it, its datasets, its documents, its assets |
+| DELETE | `/v1/projects/{p}` | admins | Delete it, its datasets, its documents, its assets |
 | GET | `/v1/projects/{p}/members` | members | The roster, invitations included |
 | POST | `/v1/projects/{p}/members` | admins | Invite an address with a role |
 | PATCH | `/v1/projects/{p}/members/{userId}` | admins | Change a role |
