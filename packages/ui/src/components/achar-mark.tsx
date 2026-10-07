@@ -1,6 +1,6 @@
-import Image from 'next/image';
-import logo from '../../assets/logo.png';
-import { cn } from '../lib/utils';
+import Image from "next/image";
+import logo from "../../assets/logo.png";
+import { cn } from "../lib/utils";
 
 /**
  * The wordmark: the Achar flame, then the name.
@@ -21,7 +21,7 @@ import { cn } from '../lib/utils';
  */
 export function AcharMark({ className }: { className?: string }) {
   return (
-    <span className={cn('inline-flex items-center gap-2', className)}>
+    <span className={cn("inline-flex items-center gap-2", className)}>
       <Image
         src={logo}
         alt=""
@@ -35,7 +35,6 @@ export function AcharMark({ className }: { className?: string }) {
         sizes="32px"
         className="h-8 w-auto shrink-0"
       />
-      <span className="text-base font-semibold tracking-tight text-foreground">Achar</span>
     </span>
   );
 }
