@@ -6,7 +6,7 @@ import { Button, Input, Label, cn } from '@achar/ui';
 
 import { CodeBlock } from '@/components/docs/code-block';
 import { usePlayground } from '@/components/docs/playground-context';
-import { runEndpoint, triesInBrowser, type PlaygroundResult } from '@/lib/api-playground';
+import { runEndpoint, type PlaygroundResult } from '@/lib/api-playground';
 import { bodyFor, type ExampleValues } from '@/lib/api-example';
 import type { ApiEndpoint } from '@/lib/api-reference';
 
@@ -19,9 +19,9 @@ import type { ApiEndpoint } from '@/lib/api-reference';
  * choice — `GET /v1/data/query` with no `perspective` means "what a site serves",
  * which is what somebody pressing Send means.
  *
- * A route that needs a *person's* token gets no playground and says why, rather
- * than a form that answers 401 and leaves somebody to work out that this page
- * cannot hold that credential.
+ * Every route here takes an API token — that is what this reference is — so every
+ * card has one. `auth` is still read rather than assumed, because the one route
+ * that needs no credential should not be given an empty `Authorization` header.
  */
 export function TryIt({ endpoint, baseUrl }: { endpoint: ApiEndpoint; baseUrl: string }) {
   const { credential } = usePlayground();
@@ -29,16 +29,6 @@ export function TryIt({ endpoint, baseUrl }: { endpoint: ApiEndpoint; baseUrl: s
   const [result, setResult] = useState<PlaygroundResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-
-  if (!triesInBrowser(endpoint)) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        An API token cannot call this route — it is verified at the gateway, before any handler runs,
-        and only a signed-in person&rsquo;s ID token gets past. The studio and the console are its
-        callers, which is why there is nothing to try here.
-      </p>
-    );
-  }
 
   const needsToken = endpoint.auth !== 'none';
 

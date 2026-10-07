@@ -207,6 +207,14 @@ export class AcharClient {
     return schemaModule.putSchema(this.context, projectId, dataset, body);
   }
 
+  createType(
+    projectId: string,
+    dataset: string,
+    body: schemaModule.CreateTypeBody,
+  ): Promise<DatasetSchema> {
+    return schemaModule.createType(this.context, projectId, dataset, body);
+  }
+
   // ── Documents ──────────────────────────────────────────────────────────────
 
   query<T>(projectId: string, dataset: string, req: QueryRequest): Promise<QueryResult<T>> {

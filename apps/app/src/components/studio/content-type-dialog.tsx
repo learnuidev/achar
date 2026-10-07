@@ -10,6 +10,7 @@ import {
   pascalCase,
   printTypeDeclaration,
 } from '@achar/schema';
+import type { CreateTypeBody } from '@achar/api';
 import type { DatasetSchema, SchemaType } from '@achar/types';
 import {
   Button,
@@ -49,9 +50,11 @@ import { ICON_NAMES, iconFor } from '@/lib/icons';
  * same text, and the text is what gets saved.
  *
  * What is *not* editable here: a type's preview fields, its orderings and its
- * groups. Those are the parts of the stored schema this form does not yet speak
- * for, and a form that silently dropped them would rewrite somebody's schema
- * behind their back — so they are carried across untouched. See `mergeInto`.
+ * groups. Those are the parts of the stored schema this form does not speak for,
+ * and a form that silently dropped them would rewrite somebody's schema behind
+ * their back — so the API carries them across the write, which is the only place
+ * that can do it against what is actually stored rather than against the copy this
+ * screen loaded. See `addDatasetType`.
  */
 export function ContentTypeDialog({
   schema,
@@ -75,8 +78,8 @@ export function ContentTypeDialog({
   const parsed = useMemo(() => parseTypeDeclaration(source), [source]);
   const clean = parsed.issues.length === 0 && parsed.name.length > 0;
 
-  const save = useAction(async (client, types: SchemaType[]) =>
-    client.putSchema(schema.projectId, schema.dataset, { types }),
+  const save = useAction(async (client, body: CreateTypeBody) =>
+    client.createType(schema.projectId, schema.dataset, body),
   );
 
   function reset() {
@@ -126,28 +129,25 @@ export function ContentTypeDialog({
     event.preventDefault();
     if (!clean || save.pending) return;
 
-    const next: SchemaType = {
-      ...(type ?? {}),
+    // One type, and the name it is replacing when it is a rename — never the whole
+    // array. A `types` list sent from here would be this screen's copy of a schema
+    // somebody else may have added to since it loaded, and writing it back is how a
+    // type gets lost.
+    const saved = await save.run({
       name: parsed.name,
       title: title.trim() || parsed.title || humanise(parsed.name),
       kind,
       icon,
       fields: parsed.fields,
       ...(parsed.description ? { description: parsed.description } : {}),
-    };
-
-    // The old name is what gets replaced, not the new one: renaming a type is an
-    // edit like any other, and looking up the new name would leave the old type
-    // behind as a second copy under the name it used to have.
-    const types = mergeInto(schema.types, type?.name, next);
-
-    const saved = await save.run(types);
+      ...(type ? { replaces: type.name } : {}),
+    });
     if (!saved) {
       toast.error(save.error ?? 'Could not save the schema');
       return;
     }
 
-    toast.success(`${next.title} saved`, {
+    toast.success(`${title.trim() || parsed.title || humanise(parsed.name)} saved`, {
       description: 'The studio is drawn from this now — every form and every list.',
     });
     setOpen(false);
@@ -302,22 +302,6 @@ const START = `type Untitled = {
   /** Write the fields this document has. */
   body: text;
 }`;
-
-/**
- * The saved schema, with one type replaced or added.
- *
- * It replaces *in place*, so that editing a type does not move it to the end of
- * the rail — a list that reorders itself every time somebody fixes a typo is a
- * list people lose their place in. And it spreads the type it is replacing, which
- * is what carries the parts this form does not edit: `preview`, `orderings`,
- * `groups` and a hand-written `description` survive an edit that knows nothing
- * about them.
- */
-function mergeInto(types: SchemaType[], replacing: string | undefined, next: SchemaType): SchemaType[] {
-  const index = replacing ? types.findIndex((candidate) => candidate.name === replacing) : -1;
-  if (index === -1) return [...types, next];
-  return types.map((candidate, position) => (position === index ? next : candidate));
-}
 
 /** What Achar understood, so that the text and the schema are visibly the same thing. */
 function ParsedFields({ fields }: { fields: SchemaType['fields'] }) {

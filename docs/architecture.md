@@ -117,6 +117,9 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
   subset as an issue with a line and column; `printTypeDeclaration(type)` writes
   fields back out, and the pair round-trip; `inferFields(sample)` reads a pasted
   JSON document (or a list of them) into fields and says what it had to guess.
+  The studio parses it and `POST /v1/schema/{p}/{d}/types` stores the result, so the
+  TypeScript is a way of *writing* a schema rather than a second schema language the
+  API would have to read: what is stored is the fields it produced.
 - `documentTypes(schema): SchemaType[]` and `fieldByPath(type, path)`.
 
 **Achar's own content model** — `defaultSchema()` returns exactly these:
@@ -216,7 +219,7 @@ code.
 | Routes | Authorizer | Who verifies |
 | --- | --- | --- |
 | `/v1/projects/**`, `/v1/me` | Cognito JWT, at the gateway | API Gateway |
-| `/v1/data/**`, `/v1/assets/**` | none | **the handler**, via `resolveViewer` |
+| `/v1/data/**`, `/v1/assets/**`, `/v1/schema/**` | none | **the handler**, via `resolveViewer` |
 | `/v1/info` | none | nobody — it is the one anonymous route |
 
 `resolveViewer` is the single entry point that decides which credential it was
@@ -260,7 +263,7 @@ the handler never sees an unauthenticated request at all.
 | DELETE | `/v1/projects/{p}/datasets/{d}` | admins | Delete it and everything in it |
 | GET | `/v1/projects/{p}/datasets/{d}/export` | members | The whole dataset, portable |
 | GET | `/v1/projects/{p}/datasets/{d}/schema` | members | The schema it is authored against |
-| PUT | `/v1/projects/{p}/datasets/{d}/schema` | editors | Replace it |
+| PUT | `/v1/projects/{p}/datasets/{d}/schema` | editors | Replace it, whole |
 | GET | `/v1/projects/{p}/tokens` | admins | The project's API tokens |
 | POST | `/v1/projects/{p}/tokens` | admins | Issue one — **the only response that carries the secret** |
 | DELETE | `/v1/projects/{p}/tokens/{tokenId}` | admins | Revoke it |
@@ -279,6 +282,17 @@ the handler never sees an unauthenticated request at all.
 | POST | `/v1/assets/{p}/{d}/upload-url` | editors | Reserve a row and presign a PUT |
 | POST | `/v1/assets/{p}/{d}` | editors | Commit the metadata after the PUT |
 | DELETE | `/v1/assets/{p}/{d}/{assetId}` | editors | Delete the object and the row |
+| POST | `/v1/schema/{p}/{d}/types` | editors | Add or replace **one** content type: 201 when added, 200 when replaced, `replaces` when it is a rename |
+
+The last row is the schema seen from the token side, and it exists because the
+whole-schema PUT above cannot be used by anything that is not holding the whole
+schema. A client that adds one type by PUT has to read `types` first, and two
+clients doing that at once lose one of the two writes. `POST /v1/schema/{p}/{d}/types`
+merges server-side instead, and makes the write conditional on the revision it
+read — so a concurrent write is noticed and re-applied rather than overwritten
+(`addDatasetType` in `services/api/src/lib/schemas.ts`). It also answers 409
+`TYPE_EXISTS` rather than quietly standing in for a type of the same name, which
+is what keeps the word "create" honest.
 
 Assets are one table and three kinds — `image`, `video`, `file` — and a document
 points at any of them with a reference string rather than with bytes:

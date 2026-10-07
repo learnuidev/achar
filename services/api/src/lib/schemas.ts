@@ -24,7 +24,7 @@
 import type { DatasetSchema, SchemaType } from '@achar/types';
 import { previewOf, validateDocument, type SchemaIssue } from '@achar/schema';
 import { createHash } from 'node:crypto';
-import { Keys, deleteItem, getItem, putItem, type Item } from './dynamo';
+import { Keys, deleteItem, getItem, putItem, tryUpdateItem, type Item } from './dynamo';
 import { HttpError } from './http';
 
 export interface SchemaRecord extends Item {
@@ -99,6 +99,161 @@ export async function putDatasetSchema(
 
   await putItem('SchemasTable', record as unknown as Item);
   return { projectId, dataset, types, revision: record.revision, updatedAt: now };
+}
+
+/** How many times a one-type write is re-read and re-applied before it gives up. */
+const MERGE_ATTEMPTS = 3;
+
+/**
+ * A write of one content type.
+ *
+ * `replaces` is what makes a rename expressible, and it is the caller's to say
+ * rather than something to infer: the body carries the type as it should now be,
+ * so the name it used to have is the one fact about the previous state that the
+ * request cannot contain.
+ *
+ * **It is also the line between a create and an upsert, and that line is drawn
+ * here rather than in the route's name.** Absent, the write only adds: a name the
+ * schema already holds is a `TYPE_EXISTS` conflict, because a create that quietly
+ * stood in for an existing content type is a create that destroys one — with one
+ * typo, and no way to tell from the answer. Present, the write stands in for that
+ * type where it is, or adds it when it is not there yet, which is what makes a
+ * bootstrap script safe to run twice. `@achar/schema` keeps `createIfNotExists` and
+ * `createOrReplace` apart for the same reason: the caller knows which it means and
+ * a helper cannot guess.
+ */
+export interface TypeWrite {
+  type: SchemaType;
+  /** The name this write stands in for. Absent means "only if the name is free". */
+  replaces?: string;
+}
+
+export interface TypeWriteResult {
+  schema: DatasetSchema;
+  /** False when a type of that name was already there and this write replaced it. */
+  created: boolean;
+}
+
+/**
+ * Adds or replaces one content type, without replacing the schema around it.
+ *
+ * The difference between this and `putDatasetSchema` is not cosmetic. A PUT carries
+ * the whole `types` array, so a client adding one type has to read the schema,
+ * append, and write everything back — and two of those interleaved lose one of the
+ * two types, silently, because the second write is a whole-array assignment that
+ * never knew about the first. The window is as long as the client's own round trip.
+ *
+ * So the read, the merge and the write happen here instead, and the write is
+ * conditional on the revision the read saw. A concurrent write is therefore not
+ * merged into but *noticed*: this re-reads and applies itself again on top of the
+ * newer types. `revision` is what makes that check mean something — it is a hash of
+ * the types, so "unchanged" is a fact about the content rather than a timestamp
+ * that ticks on writes which changed nothing.
+ *
+ * Merging is also what carries the parts of a type that nothing writes yet:
+ * `preview`, `orderings` and `groups` are stored, drawn by the studio, and edited
+ * by no route at all. See `mergeType`.
+ */
+export async function addDatasetType(
+  projectId: string,
+  dataset: string,
+  write: TypeWrite,
+): Promise<TypeWriteResult> {
+  const datasetKey = schemaKeyOf(projectId, dataset);
+
+  for (let attempt = 1; attempt <= MERGE_ATTEMPTS; attempt += 1) {
+    const key = Keys.schema(projectId, datasetKey);
+    const row = await getItem<SchemaRecord>('SchemasTable', key);
+    const types = Array.isArray(row?.types) ? row.types : [];
+
+    // A create is a create. Without `replaces` the caller is adding a type and not
+    // saying which one it stands in for, so a name that is already taken is a
+    // conflict rather than an invitation to overwrite somebody's type — and it is
+    // the only case where the two readings of this write differ, which is why the
+    // flag is a name rather than a mode.
+    if (write.replaces === undefined && types.some((candidate) => candidate.name === write.type.name)) {
+      throw new HttpError(
+        409,
+        'TYPE_EXISTS',
+        `${write.type.name} is already a content type in this dataset`,
+        { type: write.type.name },
+      );
+    }
+
+    // Replaced in place, so that editing a type does not move it to the end of the
+    // studio's rail. A list that reorders itself every time somebody fixes a typo
+    // is a list people lose their place in.
+    const replacing = write.replaces ?? write.type.name;
+    const index = types.findIndex((candidate) => candidate.name === replacing);
+    const next =
+      index === -1
+        ? [...types, write.type]
+        : types.map((candidate, position) =>
+            position === index ? mergeType(candidate, write.type) : candidate,
+          );
+
+    // A rename onto a name another type already holds arrives here as two types
+    // sharing one name, which is the one thing a schema may not be.
+    assertUsableTypes(next);
+
+    const revision = revisionOf(next);
+    const updatedAt = new Date().toISOString();
+
+    const applied = await tryUpdateItem<SchemaRecord>('SchemasTable', key, {
+      set: { types: next, revision, updatedAt },
+      // `attribute_not_exists` for the first write, because a schema row that has
+      // never existed is not a row at revision `''`. `revision` is aliased rather
+      // than written bare: it is one of DynamoDB's reserved words, and a raw one in
+      // a condition expression is a syntax error rather than a lookup.
+      condition: row ? '#revision = :expected' : 'attribute_not_exists(#revision)',
+      names: { '#revision': 'revision' },
+      ...(row ? { values: { ':expected': row.revision } } : {}),
+    });
+
+    if (applied.changed) {
+      return {
+        schema: { projectId, dataset, types: next, revision, updatedAt },
+        created: index === -1,
+      };
+    }
+  }
+
+  // Three losses in a row is not a race any more, it is a schema somebody is
+  // writing to continuously, and answering with the merged types would be a lie
+  // about which ones landed.
+  throw new HttpError(
+    409,
+    'CONFLICT',
+    'Another write changed this schema while this one was being applied',
+  );
+}
+
+/**
+ * The incoming type, written over the stored one.
+ *
+ * The stored type is the starting point, so keys this write does not speak for
+ * survive it. The keys that *are* overwritten are the six a type editor owns —
+ * `name`, `title`, `kind`, `icon`, `fields`, `description` — and two of them are
+ * deleted when the request leaves them out rather than kept. That asymmetry is the
+ * point: a plain spread would make clearing an icon or a description impossible,
+ * because "absent" and "unchanged" would be the same word.
+ */
+function mergeType(stored: SchemaType, incoming: SchemaType): SchemaType {
+  const merged: SchemaType = {
+    ...stored,
+    name: incoming.name,
+    title: incoming.title,
+    kind: incoming.kind,
+    fields: incoming.fields,
+  };
+
+  if (incoming.icon === undefined) delete merged.icon;
+  else merged.icon = incoming.icon;
+
+  if (incoming.description === undefined) delete merged.description;
+  else merged.description = incoming.description;
+
+  return merged;
 }
 
 export async function deleteSchema(projectId: string, dataset: string): Promise<boolean> {

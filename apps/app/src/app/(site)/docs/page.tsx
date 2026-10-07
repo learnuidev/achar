@@ -40,11 +40,17 @@ import { apiUrlFromEnv } from '@/lib/env';
  * (`apiUrlFromEnv`), so every `curl` on the page is a command that runs against the
  * API this site reads its own content from. That is the whole reason the examples
  * are built rather than written.
+ *
+ * **It documents the routes an API token reaches, and only those.** The management
+ * routes are a signed-in person's — the gateway refuses a token before any handler
+ * runs — so they are not here, and every card on this page has a playground. See the
+ * header of `lib/api-reference`. What the page says about the other half of the API
+ * is one paragraph: that it exists, that it is the studio's, and where to go.
  */
 export const metadata: Metadata = {
   title: 'API reference — read Achar from your own code',
   description:
-    'The content API: query a dataset with GROQ, read and write documents, upload assets, and manage projects — with an API token or a signed-in person’s token. Forty routes, documented, with a playground.',
+    'The content API, as an API token reaches it: query a dataset with GROQ, read and write documents, and upload assets. Documented endpoint by endpoint, with a playground.',
 };
 
 export default function ApiDocsPage() {
@@ -71,9 +77,10 @@ export default function ApiDocsPage() {
                 Read Achar from your own code
               </h1>
               <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                A content lake with a query language, a document API with drafts and publishing, and
-                an asset pipeline where the bytes never pass through a server. Everything here is
-                served from{' '}
+                A content lake with a query language, a schema you write rather than one you are given,
+                a document API with drafts and publishing, and an asset pipeline where the bytes never
+                pass through a server. This is the half of it an API token reaches — the half a site, a
+                build or a script uses. Everything here is served from{' '}
                 <span className="font-mono text-xs text-foreground">
                   {baseUrl || 'your own deployment'}
                 </span>{' '}
@@ -91,7 +98,8 @@ export default function ApiDocsPage() {
                   <Link href="#query">See the query language</Link>
                 </Button>
                 <span className="text-xs text-muted-foreground">
-                  {API_ENDPOINTS.length} routes · {API_ENDPOINT_GROUPS.length} groups
+                  {API_ENDPOINTS.length} routes an API token reaches · {API_ENDPOINT_GROUPS.length}{' '}
+                  groups
                 </span>
               </div>
             </header>
@@ -99,15 +107,16 @@ export default function ApiDocsPage() {
             <section id="try-it" className="mt-10 scroll-mt-24 space-y-3">
               <h2 className="text-lg font-medium">Try it here</h2>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                **Signed in, make one here**: pick a project you administer, name the token and choose
-                what it may do — the secret is shown once and goes straight into the requests below.
+                <span className="font-medium text-foreground">Signed in, make one here</span>: pick a
+                project you administer, name the token and choose what it may do — the secret is shown
+                once and goes straight into the requests below.
                 Signed out, paste a token you already have. Either way the request goes from your
                 browser to the API with the credential in the header and nothing in between.
               </p>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Only the routes that accept a **token** can be called this way — the management routes
-                are verified at the gateway and need a signed-in person&rsquo;s ID token, which this
-                page will not hold.
+                Every route below takes an API token, which is what this reference is: the routes a
+                gateway authorizer would refuse are not on it. A token is scoped to one project, and
+                its role decides whether it may write.
               </p>
               {/* The same reading of the environment the site's layout makes: a pool
                   is what makes a session readable, and the panel is told rather than
@@ -123,8 +132,12 @@ export default function ApiDocsPage() {
                     <span className="font-medium">1. Make a project, and a dataset in it.</span> A
                     project owns datasets and people; a dataset is the content store everything below
                     is addressed by. Both are made in the studio, and a new dataset starts with{' '}
-                    <span className="font-medium">no content types</span> — you write them, as
-                    TypeScript or from a sample of your own data.
+                    <span className="font-medium">no content types</span> — you write them, in the
+                    studio’s type editor or through{' '}
+                    <Link href="#create-type" className="underline">
+                      the API route below
+                    </Link>
+                    , as TypeScript or from a sample of your own data.
                   </p>
                 </li>
                 <li className="grid gap-2">
@@ -181,13 +194,15 @@ export default function ApiDocsPage() {
                   <p className="mt-2 text-xs text-muted-foreground">
                     <span className="font-mono">achar_&lt;tokenId&gt;_&lt;secret&gt;</span>. Scoped
                     to one project, with a role, and revocable on its own — so it keeps working when
-                    the person who issued it leaves. Verified **by the handler**, because API
+                    the person who issued it leaves. Verified{' '}
+                    <span className="font-medium text-foreground">by the handler</span>, because API
                     Gateway&rsquo;s authorizer only understands Cognito.
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    It reaches the content and asset routes:{' '}
-                    <span className="font-mono">/v1/data/**</span> and{' '}
-                    <span className="font-mono">/v1/assets/**</span>.
+                    It reaches the content, asset and schema routes:{' '}
+                    <span className="font-mono">/v1/data/**</span>,{' '}
+                    <span className="font-mono">/v1/assets/**</span> and{' '}
+                    <span className="font-mono">/v1/schema/**</span>.
                   </p>
                 </div>
 
@@ -198,12 +213,13 @@ export default function ApiDocsPage() {
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
                     A Cognito ID token from signing in. The studio and the console send this, and it
-                    is verified **at the gateway** — before any handler runs — which is why an API
-                    token presented to a management route is refused with a 401 rather than reaching
-                    code that could explain itself.
+                    is verified <span className="font-medium text-foreground">at the gateway</span> —
+                    before any handler runs — which is why an API token presented to a management route
+                    is refused with a 401 rather than reaching code that could explain itself.
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    It reaches everything: projects, datasets, schemas, members, tokens, webhooks.
+                    It reaches everything else: projects, datasets, members, tokens, webhooks, and the
+                    whole-schema write.
                   </p>
                 </div>
               </div>
@@ -212,8 +228,21 @@ export default function ApiDocsPage() {
                 There is no OAuth here, and that is a decision rather than an omission: a token is
                 issued by an admin to a script, and the alternative — asking a third party&rsquo;s
                 users to consent to scopes — belongs to a product that has users to ask. A token is
-                also a **kind** of credential as well as a rank: it can never create or delete a
-                project, whatever role it carries.
+                also a <span className="font-medium text-foreground">kind</span> of credential as well
+                as a rank: it can never create or delete a project, whatever role it carries.
+              </p>
+
+              <p className="max-w-2xl text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">The other half of the API</span> is the
+                management API — projects, datasets, members, tokens, webhooks, and writing a dataset’s
+                schema in one piece — and it takes a signed-in person&rsquo;s ID token, which API
+                Gateway verifies before any handler runs. A token is refused there, so those routes are
+                not on this page: they are what the studio calls, and the studio is where they are used.
+                The one every client needs from it, issuing a token, is the{' '}
+                <Link href="#try-it" className="underline">
+                  panel above
+                </Link>
+                .
               </p>
             </section>
 

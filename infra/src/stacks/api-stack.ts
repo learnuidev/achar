@@ -234,7 +234,7 @@ function methodOf(route: HttpRouteSpec): apigwv2.HttpMethod {
   return method;
 }
 
-/** Absent means guarded — only `GET /v1/info` opts out. */
+/** Absent means guarded — the one public route and the content routes opt out. */
 function isAuthorized(route: HttpRouteSpec): boolean {
   return route.authorized !== false;
 }

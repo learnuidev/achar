@@ -387,14 +387,15 @@ export const TABLES: TableSpec[] = [
  * would have to branch on the path, which is a handler whose authorization
  * depends on which branch it took.
  *
- * **Nine routes carry no gateway authorizer**, and they are two decisions sharing
+ * **Twelve routes carry no gateway authorizer**, and they are two decisions sharing
  * one flag. `GET /v1/info` is public so a deployment can be asked whether it is
- * up. The eight under `/v1/data/**` and `/v1/assets/**` are open *to the gateway*
- * because API Gateway's JWT authorizer understands Cognito tokens and nothing
- * else — a machine presenting an Achar API token would be refused before the
- * handler ran, which would make the whole token model unreachable. Those eight
- * authenticate themselves. `HttpRouteSpec.authorized` in `../types.ts` carries the
- * full reasoning, and `docs/architecture.md` the table of who calls what.
+ * up. The eleven under `/v1/data/**`, `/v1/assets/**` and `/v1/schema/**` are open
+ * *to the gateway* because API Gateway's JWT authorizer understands Cognito tokens
+ * and nothing else — a machine presenting an Achar API token would be refused
+ * before the handler ran, which would make the whole token model unreachable. Those
+ * eleven authenticate themselves. `HttpRouteSpec.authorized` in `../types.ts`
+ * carries the full reasoning, and `docs/architecture.md` the table of who calls
+ * what.
  */
 export const FUNCTIONS: FunctionSpec[] = [
   {
@@ -546,7 +547,7 @@ export const FUNCTIONS: FunctionSpec[] = [
     handlerExport: 'handler',
     timeout: 29,
     memorySize: 512,
-    description: 'Make a dataset, with the default content model.',
+    description: 'Make a dataset, with no content types in it yet.',
     http: [{ path: '/v1/projects/{projectId}/datasets', method: 'POST' }],
   },
   {
@@ -602,6 +603,17 @@ export const FUNCTIONS: FunctionSpec[] = [
     memorySize: 512,
     description: 'Replace the schema a dataset is authored against.',
     http: [{ path: '/v1/projects/{projectId}/datasets/{dataset}/schema', method: 'PUT' }],
+  },
+
+  // ── the schema, from outside ───────────────────────────────────────────────
+  {
+    key: 'create-type',
+    entry: 'src/functions/schema/create-type.ts',
+    handlerExport: 'handler',
+    timeout: 29,
+    memorySize: 512,
+    description: 'Add or replace one content type, without replacing the schema around it.',
+    http: [{ path: '/v1/schema/{projectId}/{dataset}/types', method: 'POST', authorized: false }],
   },
 
   // ── tokens ─────────────────────────────────────────────────────────────────

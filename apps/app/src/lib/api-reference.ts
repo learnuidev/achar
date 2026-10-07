@@ -5,16 +5,21 @@
  * the API is in the page. It is one file rather than prose inside a component
  * because a reference is read by whoever changes the API: the way to keep the docs
  * true is for the endpoint that changed to be a field somebody has to walk past, in
- * a list they can see the bottom of — and the list below is the route table in
- * `infra/src/generated/service.ts`, in the order a reader needs it.
+ * a list they can see the bottom of — and the list below is the routes an **API
+ * token** reaches, in the order a reader needs them.
  *
- * **`auth` is the split that decides everything on this page.** Achar accepts two
- * kinds of caller and verifies them in two different places (see
- * `docs/architecture.md`): a signed-in *person*, whose Cognito ID token the API
- * Gateway checks before any handler runs, and an *API token*, which the handler
- * verifies itself because a gateway authorizer only understands Cognito. So
- * `person` routes cannot be called from a page like this one — a visitor has no
- * session here — and `token` routes can, which is what the playground offers.
+ * **This reference is scoped to one of the API's two credentials, deliberately.**
+ * Achar accepts a signed-in person's Cognito ID token, which API Gateway checks
+ * before any handler runs, and an API token, which the handler verifies itself
+ * because a gateway authorizer only understands Cognito. Every route the second one
+ * reaches is here; the management routes — projects, datasets, schemas, members,
+ * tokens, webhooks — take a person's session and are documented where they are used,
+ * which is the studio. A reference that listed both would be a page where half the
+ * cards say "you cannot call this from here", and half the rail is noise to anybody
+ * reading it with a token.
+ *
+ * So `auth` has two values here and every card has a playground: `none` for the one
+ * route nobody is asked about, `token` for the rest.
  */
 
 /** A field or parameter, as a card documents it. */
@@ -38,14 +43,10 @@ export interface ApiParameter extends ApiField {
  *   be asked whether it is up.
  * - `token` — an API token (`achar_<tokenId>_<secret>`), verified **by the
  *   handler**. This is what a script, a build server or a site uses, and it is the
- *   only credential a page like this can hold — so these are the endpoints with a
- *   playground.
- * - `person` — a signed-in person's Cognito ID token, verified **at the gateway**.
- *   The studio and the console call these; an API token is refused before any
- *   handler runs, which is why the reference says so rather than leaving somebody
- *   to discover it as a 401.
+ *   only credential this page can hold, which is why the whole reference is the set
+ *   of routes it reaches.
  */
-export type ApiAuth = 'none' | 'token' | 'person';
+export type ApiAuth = 'none' | 'token';
 
 export interface ApiEndpoint {
   /** The anchor it is linked by, and what the rail scrolls to. */
@@ -529,547 +530,78 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
     ],
   },
   {
-    id: 'projects',
-    title: 'Projects and datasets',
+    id: 'types',
+    title: 'Content types',
     description:
-      'The management API, in the order a project comes into being: the project, the datasets inside it, and the schema each dataset is authored against. These routes take **a signed-in person’s token** — an API token is refused at the gateway, before any handler runs.',
+      'A dataset starts with **no content types**, because what it holds is the dataset’s own decision. This is how one gets written from outside the studio — the same route the studio’s type editor calls, so a schema built by a script and a schema built by hand are the same schema.',
     endpoints: [
       {
-        id: 'list-projects',
-        method: 'GET',
-        path: '/v1/projects',
-        summary: 'The projects you are in',
-        description: 'Every project the caller is an active member of, each carrying their own role in it.',
-        auth: 'person',
-        responseStatus: '200 OK',
-        responseExample: `[
-  {
-    "projectId": "proj_647baf1fe6b1",
-    "name": "Mandarino",
-    "slug": "mandarino-78c080",
-    "organizationName": "Mandarino",
-    "ownerId": "a1b2c3…",
-    "memberCount": 3,
-    "datasetCount": 1,
-    "createdAt": "2026-03-01T09:00:00.000Z",
-    "updatedAt": "2026-03-01T09:00:00.000Z",
-    "role": "ADMIN"
-  }
-]`,
-        notes: ['`role` is resolved from the caller’s own membership on every read rather than stored, so a screen never has to make a second request to decide what to draw.'],
-      },
-      {
-        id: 'create-project',
+        id: 'create-type',
         method: 'POST',
-        path: '/v1/projects',
-        summary: 'Make a project',
+        path: '/v1/schema/{projectId}/{dataset}/types',
+        summary: 'Add or replace one content type',
         description:
-          'The caller becomes its owner and its admin. A project and its owner’s membership are written in **one transaction**, because a project with no admin is a project nobody can administer, cannot be deleted through the API, and cannot be repaired by any route this service offers.',
-        auth: 'person',
+          'One type, not the whole schema. That is the difference that matters: a caller sending a whole `types` array has to have read it first, and two editors doing that at once lose one of the two types. The API merges instead — reading, merging, and writing only if the revision it read is still the one there — so two of these are applied one after the other rather than one over the other.',
+        auth: 'token',
+        parameters: [PROJECT_ID, DATASET],
         body: [
-          { name: 'name', type: 'string', required: true, description: 'What the project is called. Up to 120 characters.', example: 'Mandarino' },
-          { name: 'organizationName', type: 'string', description: 'Who it belongs to on paper. Defaults to the project’s own name.', example: 'Mandarino' },
+          {
+            name: 'name',
+            type: 'string',
+            required: true,
+            description:
+              'What the type is filed under, and what a document of it stores as `_type`. A TypeScript identifier, because it is the name your queries write.',
+            example: 'post',
+          },
+          { name: 'title', type: 'string', description: 'What the studio calls it. Absent means the name, made readable — `post` becomes `Post`.', example: 'Blog post' },
+          { name: 'kind', type: '"document" | "object"', description: 'Absent means `document`. An `object` is a type that is only ever a field of another type — an address, a link.', example: 'document' },
+          { name: 'icon', type: 'string', description: 'A lucide icon name, drawn beside the type in the studio.', example: 'FileText' },
+          { name: 'description', type: 'string', description: 'A sentence for whoever reads this schema next.' },
+          {
+            name: 'fields',
+            type: 'SchemaField[]',
+            required: true,
+            description:
+              'What a document of this type holds, in the order a form draws them. Each is `{ name, title, type }` plus whatever that type needs — `options` for a picker, `of` for an array, `to` for a reference, `required` for one a publish is refused without.',
+            example: '[{ "name": "title", "title": "Title", "type": "string", "required": true }]',
+          },
+          {
+            name: 'replaces',
+            type: 'string',
+            description:
+              'The name this write stands in for: an edit, or a rename. **Absent, the write only adds** — a name already in the schema is a `409` rather than a quiet overwrite. Present, it is an upsert, which is what makes a bootstrap script safe to run twice.',
+            example: 'post',
+          },
         ],
-        responseStatus: '201 Created',
-        responseExample: `{
-  "projectId": "proj_647baf1fe6b1",
-  "name": "Mandarino",
-  "slug": "mandarino-78c080",
-  "organizationName": "Mandarino",
-  "ownerId": "a1b2c3…",
-  "memberCount": 1,
-  "datasetCount": 0,
-  "createdAt": "2026-03-01T09:00:00.000Z",
-  "updatedAt": "2026-03-01T09:00:00.000Z",
-  "role": "ADMIN"
-}`,
-        notes: [
-          'A **new project has no content types**. Achar used to answer a dataset with Achar’s own marketing model in it, and that was the wrong answer to give anybody: what a dataset holds is the dataset owner’s decision, written as TypeScript or read from a sample of their data.',
-        ],
-      },
-      {
-        id: 'get-project',
-        method: 'GET',
-        path: '/v1/projects/{projectId}',
-        summary: 'One project',
-        description: 'The project, with the caller’s role in it.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `{
-  "projectId": "proj_647baf1fe6b1",
-  "name": "Mandarino",
-  "slug": "mandarino-78c080",
-  "organizationName": "Mandarino",
-  "ownerId": "a1b2c3…",
-  "memberCount": 3,
-  "datasetCount": 1,
-  "createdAt": "2026-03-01T09:00:00.000Z",
-  "updatedAt": "2026-03-02T10:00:00.000Z",
-  "role": "ADMIN"
-}`,
-      },
-      {
-        id: 'update-project',
-        method: 'PATCH',
-        path: '/v1/projects/{projectId}',
-        summary: 'Rename a project, or describe it',
-        description: 'Admins only. The slug follows the name, because a slug that disagreed with its name would be a name whose links are wrong forever.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        body: [
-          { name: 'name', type: 'string', description: 'The new name. The slug follows it.', example: 'Mandarino Docs' },
-          { name: 'organizationName', type: 'string', description: 'Who it belongs to on paper.' },
-          { name: 'description', type: 'string', description: 'What the project says about itself. Written by this route and not carried on `Project`.' },
-        ],
-        responseStatus: '200 OK',
-        responseExample: `{ "projectId": "proj_647baf1fe6b1", "name": "Mandarino Docs", "slug": "mandarino-docs-78c080", "role": "ADMIN" }`,
-      },
-      {
-        id: 'delete-project',
-        method: 'DELETE',
-        path: '/v1/projects/{projectId}',
-        summary: 'Delete a project and everything under it',
-        description:
-          'Any admin of the project, and never an API token — a machine credential that could destroy the project it was issued for is a credential worth stealing rather than one worth issuing.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '204 No Content',
-        notes: [
-          'The cascade is ordered and it matters: documents and assets first, then the dataset rows that name them, then members, tokens and webhooks, and the project row **last** — so an interrupted delete leaves a project that still lists what is left and can be deleted again.',
-          'What was removed is logged, because once the rows are gone that line is the only record the delete happened.',
-        ],
-      },
-      {
-        id: 'list-datasets',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/datasets',
-        summary: 'A project’s datasets',
-        description: 'The content stores inside a project, with their counts and visibility.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `[
-  {
-    "projectId": "proj_647baf1fe6b1",
-    "datasetName": "production",
-    "visibility": "PRIVATE",
-    "documentCount": 12,
-    "assetCount": 4,
-    "createdAt": "2026-03-01T09:00:00.000Z",
-    "updatedAt": "2026-03-02T10:00:00.000Z",
-    "lastMutationAt": "2026-03-02T10:00:00.000Z"
-  }
-]`,
-      },
-      {
-        id: 'create-dataset',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/datasets',
-        summary: 'Make a dataset',
-        description:
-          'A content store inside a project. Two datasets are two sets of documents and assets, not one set with a flag — `production` and `staging` are separate rather than the same content twice.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        body: [
-          { name: 'datasetName', type: 'string', required: true, description: 'Lowercase letters, digits, `_` and `-`. It is also its URL segment, so it is constrained rather than escaped.', example: 'production' },
-          { name: 'visibility', type: '"PRIVATE" | "PUBLIC"', description: 'Public means an anonymous reader with a public token may query it. Defaults to private.', example: 'PRIVATE' },
-        ],
-        responseStatus: '201 Created',
-        responseExample: `{ "projectId": "proj_647baf1fe6b1", "datasetName": "production", "visibility": "PRIVATE", "documentCount": 0, "assetCount": 0 }`,
-      },
-      {
-        id: 'get-dataset',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/datasets/{dataset}',
-        summary: 'One dataset',
-        description: 'The dataset row: visibility, counts, and when anything last changed in it.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        responseStatus: '200 OK',
-        responseExample: `{ "projectId": "proj_647baf1fe6b1", "datasetName": "production", "visibility": "PRIVATE", "documentCount": 12, "assetCount": 4 }`,
-      },
-      {
-        id: 'update-dataset',
-        method: 'PATCH',
-        path: '/v1/projects/{projectId}/datasets/{dataset}',
-        summary: 'Change a dataset’s visibility',
-        description: 'The one thing about a dataset that is editable after it exists.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        body: [{ name: 'visibility', type: '"PRIVATE" | "PUBLIC"', required: true, description: 'Who may read it without a token.', example: 'PUBLIC' }],
-        responseStatus: '200 OK',
-        responseExample: `{ "projectId": "proj_647baf1fe6b1", "datasetName": "production", "visibility": "PUBLIC" }`,
-      },
-      {
-        id: 'delete-dataset',
-        method: 'DELETE',
-        path: '/v1/projects/{projectId}/datasets/{dataset}',
-        summary: 'Delete a dataset and everything in it',
-        description: 'Admins only. Documents, then assets, then the row that names them.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        responseStatus: '200 OK',
-        responseExample: `{ "documents": 12, "assets": 4, "schemas": 1 }`,
-      },
-      {
-        id: 'export-dataset',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/datasets/{dataset}/export',
-        summary: 'The whole dataset, portable',
-        description: 'Schema, documents and asset rows as one object — what a backup is, and what a migration starts from.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        responseStatus: '200 OK',
-        responseExample: `{
-  "projectId": "proj_647baf1fe6b1",
-  "dataset": "production",
-  "schema": { "types": [ … ], "revision": "8f2a91…" },
-  "documents": [ … ],
-  "assets": [ … ],
-  "exportedAt": "2026-03-02T10:00:00.000Z"
-}`,
-      },
-      {
-        id: 'get-schema',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/datasets/{dataset}/schema',
-        summary: 'The schema a dataset is authored against',
-        description:
-          'The content types this dataset declares. Everything the studio draws is downstream of this: the list of types, each editor’s controls, the name a list gives a document, and the orderings it offers.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        responseStatus: '200 OK',
+        responseStatus: '201 Created · 200 OK',
         responseExample: `{
   "projectId": "proj_647baf1fe6b1",
   "dataset": "production",
   "types": [
     {
-      "name": "pricing",
-      "title": "Pricing",
+      "name": "post",
+      "title": "Blog post",
       "kind": "document",
-      "icon": "CreditCard",
+      "icon": "FileText",
       "fields": [
-        { "name": "title", "title": "Title", "type": "string", "required": true },
-        { "name": "plans", "title": "Plans", "type": "array", "of": [ { "name": "item", "type": "object", "fields": [ … ] } ] }
+        { "name": "title", "title": "Title", "type": "string", "required": true }
       ]
     }
   ],
-  "revision": "8f2a91…",
-  "updatedAt": "2026-03-02T10:00:00.000Z"
+  "revision": "9f2c1a…",
+  "updatedAt": "2026-03-01T09:00:00.000Z"
 }`,
+        responseFields: [
+          { name: 'types', type: 'SchemaType[]', description: 'Every type the dataset has now, not only the one written, in the order the studio draws them.' },
+          { name: 'revision', type: 'string', description: 'A hash of `types`. It changes when they change and not otherwise, which is what the next write is made conditional on.' },
+          { name: 'updatedAt', type: 'string', description: 'ISO 8601. When this schema row was last written.' },
+        ],
         notes: [
-          'A dataset with no schema row has **no content types** — an empty list, not somebody else’s model.',
-          '`revision` is a hash of the types rather than a timestamp, so two clients that saved the same schema arrive at one revision.',
+          '**201 means it added a type; 200 means it replaced one** — so a second run of a bootstrap script can tell that it is a second run.',
+          'Without `replaces`, a name that is already taken answers **409 `TYPE_EXISTS`**. A create that stood in for an existing type would be a create that destroys one, with one typo and nothing in the answer to say so.',
+          'The parts of a type this body does not speak for — `preview`, `orderings` and `groups` — are carried across a replace from what is stored. But a field the type you sent leaves out is cleared, so an edit can remove a description as well as set one.',
+          'A rename is a `replaces` whose `name` differs. The name a type is filed under is its identity, so a rename is this type arriving where that one was rather than an edit to a field — and renaming onto a name another type already holds is refused, because a schema may not repeat one.',
         ],
-      },
-      {
-        id: 'put-schema',
-        method: 'PUT',
-        path: '/v1/projects/{projectId}/datasets/{dataset}/schema',
-        summary: 'Replace the schema',
-        description:
-          'The whole list of types, every time. A schema is replaced rather than patched, so a client that saves sends what the schema *is* — which is also why a save can be compared by revision rather than diffed.',
-        auth: 'person',
-        parameters: [PROJECT_ID, DATASET],
-        body: [
-          {
-            name: 'types',
-            type: 'SchemaType[]',
-            required: true,
-            description: 'Every type the dataset declares, in the order the studio should list them. An empty list is legal: it is the state a new dataset is in.',
-            example: '[{"name":"pricing","title":"Pricing","kind":"document","icon":"CreditCard","fields":[{"name":"title","title":"Title","type":"string","required":true}]}]',
-          },
-        ],
-        responseStatus: '200 OK',
-        responseExample: `{ "projectId": "proj_647baf1fe6b1", "dataset": "production", "types": [ … ], "revision": "9c1b04…", "updatedAt": "2026-03-02T10:05:00.000Z" }`,
-        notes: [
-          'Type names have to be identifiers and no two may share one. Anything else — a required field with no title, a reference to a type that does not exist — is somebody’s work in progress, and the studio is where it is argued with.',
-          'The studio’s type editor writes this for you: a declaration (`type Pricing = { … }`) or a pasted sample of data.',
-        ],
-      },
-    ],
-  },
-  {
-    id: 'members',
-    title: 'Members',
-    description:
-      'Who is in a project and what they may do. Roles are `ADMIN`, `EDITOR` and `VIEWER`; an invitation is a row keyed by the address it was sent to, and accepting it re-keys that row to the person.',
-    endpoints: [
-      {
-        id: 'list-members',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/members',
-        summary: 'The roster, invitations included',
-        description: 'Active members first, then the offers nobody has accepted yet — one list, because that is what it is to somebody reading it.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `[
-  { "projectId": "proj_647baf1fe6b1", "userId": "a1b2c3…", "email": "you@example.com", "name": "You", "role": "ADMIN", "status": "ACTIVE", "isYou": true },
-  { "projectId": "proj_647baf1fe6b1", "userId": "maya@example.com", "email": "maya@example.com", "role": "EDITOR", "status": "INVITED", "invitedEmail": "maya@example.com", "isYou": false }
-]`,
-      },
-      {
-        id: 'invite-member',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/members',
-        summary: 'Invite an address',
-        description: 'Admins only. The invitation is the row, and the mail is a notification about it — so an invitation sent to an address that never arrives is still an offer that can be accepted from the studio.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        body: [
-          { name: 'email', type: 'string', required: true, description: 'Who to invite. Normalized to lowercase.', example: 'maya@example.com' },
-          { name: 'role', type: '"ADMIN" | "EDITOR" | "VIEWER"', required: true, description: 'What they may do once they accept.', example: 'EDITOR' },
-          { name: 'name', type: 'string', description: 'What to call them until they sign in and say.' },
-        ],
-        responseStatus: '201 Created',
-        responseExample: `{ "userId": "maya@example.com", "email": "maya@example.com", "role": "EDITOR", "status": "INVITED", "invitedEmail": "maya@example.com" }`,
-      },
-      {
-        id: 'update-member',
-        method: 'PATCH',
-        path: '/v1/projects/{projectId}/members/{userId}',
-        summary: 'Change a role',
-        description: 'Admins only. The member key is the address while the offer stands and the person’s id once it has been accepted.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'userId', type: 'string', required: true, description: 'The `sub` once accepted, or the address while invited.', example: 'maya@example.com' },
-        ],
-        body: [{ name: 'role', type: '"ADMIN" | "EDITOR" | "VIEWER"', required: true, description: 'The new role.', example: 'ADMIN' }],
-        responseStatus: '200 OK',
-        responseExample: `{ "userId": "maya@example.com", "role": "ADMIN", "status": "ACTIVE" }`,
-      },
-      {
-        id: 'remove-member',
-        method: 'DELETE',
-        path: '/v1/projects/{projectId}/members/{userId}',
-        summary: 'Remove a member, or revoke an invitation',
-        description: 'One route for both because they are one row and one intent: taking the row away is what stops the person reaching the project, whether or not they ever did.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'userId', type: 'string', required: true, description: 'The `sub` once accepted, or the address while invited.', example: 'maya@example.com' },
-        ],
-        responseStatus: '204 No Content',
-        notes: [
-          'The owner is refused. Not because of who may delete the project — every admin may — but because removal is not undoable: the row is keyed by the `sub` once accepted, so there is no address left to invite back to.',
-          'The member count moves only when the row removed was an **ACTIVE** membership: losing an invitation nobody accepted must not subtract anybody.',
-        ],
-      },
-      {
-        id: 'resend-invitation',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/members/{userId}/invitation',
-        summary: 'Send an invitation again',
-        description: 'Refreshes when the offer was made, and moves the role when one is given: re-inviting somebody is also how an admin offers them a different place.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'userId', type: 'string', required: true, description: 'The address the invitation was sent to.', example: 'maya@example.com' },
-        ],
-        body: [{ name: 'role', type: '"ADMIN" | "EDITOR" | "VIEWER"', description: 'Move them to this role at the same time.', example: 'VIEWER' }],
-        responseStatus: '200 OK',
-        responseExample: `{ "userId": "maya@example.com", "role": "VIEWER", "status": "INVITED", "invitedAt": "2026-03-02T10:00:00.000Z" }`,
-      },
-      {
-        id: 'accept-invitation',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/invitation',
-        summary: 'Accept your own invitation',
-        description:
-          'Turns an offer into a membership in one transaction: the invitation is deleted and the membership written under the caller’s `sub`. Half of that pair is worse than neither — an invitation consumed but granting nothing cannot be accepted again.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `{ "userId": "a1b2c3…", "email": "maya@example.com", "role": "EDITOR", "status": "ACTIVE", "joinedAt": "2026-03-02T10:00:00.000Z" }`,
-        notes: ['Accepting twice is not an error, and the answer is the membership they already have rather than a second copy of it.'],
-      },
-      {
-        id: 'me',
-        method: 'GET',
-        path: '/v1/me',
-        summary: 'The caller, and their counts',
-        description: 'Who the credential is, how many projects they are an active member of, and how many invitations are waiting. A person’s profile row is written the first time this is asked.',
-        auth: 'person',
-        responseStatus: '200 OK',
-        responseExample: `{
-  "userId": "a1b2c3…",
-  "email": "you@example.com",
-  "name": "You",
-  "createdAt": "2026-02-01T09:00:00.000Z",
-  "projectCount": 2,
-  "invitationCount": 1
-}`,
-      },
-      {
-        id: 'my-invitations',
-        method: 'GET',
-        path: '/v1/me/invitations',
-        summary: 'Offers addressed to you',
-        description: 'Invitations for the caller’s own verified address, wherever they were sent from. Queried through the address index, so it cannot return an offer addressed to somebody else.',
-        auth: 'person',
-        responseStatus: '200 OK',
-        responseExample: `[
-  { "projectId": "proj_647baf1fe6b1", "projectName": "Mandarino", "role": "EDITOR", "invitedBy": "a1b2c3…", "invitedAt": "2026-03-01T09:00:00.000Z" }
-]`,
-      },
-    ],
-  },
-  {
-    id: 'tokens',
-    title: 'Tokens',
-    description:
-      'The credential the rest of this page is about. A token is the project’s own — issued by an admin, scoped to a role and optionally to one dataset, and revocable on its own, so it keeps working when the person who issued it leaves.',
-    endpoints: [
-      {
-        id: 'list-tokens',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/tokens',
-        summary: 'The project’s tokens',
-        description: 'Admins only. What each token is called, what it may do, and when it was last used — never the secret, which is answered once and stored only as a hash.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `[
-  { "tokenId": "01JQ8Z…", "name": "Build server", "role": "VIEWER", "dataset": null, "createdAt": "2026-03-01T09:00:00.000Z", "lastUsedAt": "2026-03-02T10:00:00.000Z", "revokedAt": null }
-]`,
-      },
-      {
-        id: 'create-token',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/tokens',
-        summary: 'Issue a token',
-        description:
-          '**The only response that carries the secret.** Admins only. What comes back is `achar_<tokenId>_<secret>`; the server keeps a hash, so a lost secret is reissued rather than recovered.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        body: [
-          { name: 'name', type: 'string', required: true, description: 'What it is for. A name nobody can place is a token nobody revokes.', example: 'Build server' },
-          { name: 'role', type: '"ADMIN" | "EDITOR" | "VIEWER"', required: true, description: 'What it may do. A token is checked against the role the same way a member is.', example: 'VIEWER' },
-          { name: 'dataset', type: 'string', description: 'Scope it to one dataset. Absent means the whole project.', example: 'production' },
-        ],
-        responseStatus: '201 Created',
-        responseExample: `{
-  "tokenId": "01JQ8Z…",
-  "name": "Build server",
-  "role": "VIEWER",
-  "token": "achar_01JQ8Z…_9f2c41…",
-  "createdAt": "2026-03-02T10:00:00.000Z"
-}`,
-        notes: [
-          'The secret is shown once. `GET /v1/projects/{projectId}/tokens` will never answer with it again.',
-          'A token is a **kind** of credential as well as a rank: it can never create or delete a project, whatever role it holds.',
-        ],
-      },
-      {
-        id: 'revoke-token',
-        method: 'DELETE',
-        path: '/v1/projects/{projectId}/tokens/{tokenId}',
-        summary: 'Revoke a token',
-        description: 'The row is marked revoked rather than removed, so “who had this and when” survives it. Revoking twice is not an error.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'tokenId', type: 'string', required: true, description: 'The token, by the id in its secret.', example: '01JQ8Z…' },
-        ],
-        responseStatus: '204 No Content',
-      },
-    ],
-  },
-  {
-    id: 'webhooks',
-    title: 'Webhooks',
-    description:
-      'What a project tells the outside world. A publish, a create, an update and a delete each queue a delivery, which is attempted, retried and recorded rather than fired and forgotten.',
-    endpoints: [
-      {
-        id: 'list-webhooks',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/webhooks',
-        summary: 'The project’s webhooks',
-        description: 'What is subscribed, to which events, and whether it is in service.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        responseStatus: '200 OK',
-        responseExample: `[
-  { "webhookId": "01JQ8Z…", "url": "https://example.com/hooks/achar", "events": ["publish"], "dataset": "production", "active": true, "createdAt": "2026-03-01T09:00:00.000Z" }
-]`,
-      },
-      {
-        id: 'create-webhook',
-        method: 'POST',
-        path: '/v1/projects/{projectId}/webhooks',
-        summary: 'Make a webhook',
-        description: 'A URL, the events it wants, and optionally a dataset and a filter so that a receiver is told what it subscribes to rather than everything.',
-        auth: 'person',
-        parameters: [PROJECT_ID],
-        body: [
-          { name: 'url', type: 'string', required: true, description: 'Where deliveries are POSTed.', example: 'https://example.com/hooks/achar' },
-          { name: 'events', type: 'WebhookEvent[]', required: true, description: 'One or more of `create`, `update`, `delete`, `publish`.', example: '["publish"]' },
-          { name: 'dataset', type: 'string', description: 'Only deliveries from this dataset.' },
-          { name: 'filter', type: 'string', description: 'A GROQ filter the document has to match.' },
-          { name: 'projection', type: 'string', description: 'A GROQ projection, so the receiver is sent the fields it needs and not the whole document.' },
-        ],
-        responseStatus: '201 Created',
-        responseExample: `{ "webhookId": "01JQ8Z…", "url": "https://example.com/hooks/achar", "events": ["publish"], "active": true }`,
-      },
-      {
-        id: 'update-webhook',
-        method: 'PATCH',
-        path: '/v1/projects/{projectId}/webhooks/{webhookId}',
-        summary: 'Change a webhook, or take it out of service',
-        description: 'The URL, the events, the filter, or `active` — a webhook that is failing is usually paused rather than deleted, because the deliveries it already recorded are worth keeping.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'webhookId', type: 'string', required: true, description: 'The webhook.', example: '01JQ8Z…' },
-        ],
-        body: [
-          { name: 'url', type: 'string', description: 'A new address.' },
-          { name: 'events', type: 'WebhookEvent[]', description: 'A new set of events.' },
-          { name: 'filter', type: 'string', description: 'A new filter.' },
-          { name: 'projection', type: 'string', description: 'A new projection.' },
-          { name: 'active', type: 'boolean', description: 'False pauses deliveries without forgetting the webhook.' },
-        ],
-        responseStatus: '200 OK',
-        responseExample: `{ "webhookId": "01JQ8Z…", "url": "https://example.com/hooks/achar", "events": ["publish"], "active": false }`,
-      },
-      {
-        id: 'delete-webhook',
-        method: 'DELETE',
-        path: '/v1/projects/{projectId}/webhooks/{webhookId}',
-        summary: 'Delete a webhook',
-        description: 'The webhook and its deliveries. A delivery’s own record is what a receiver is judged by, so it goes with the subscription it belongs to.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'webhookId', type: 'string', required: true, description: 'The webhook.', example: '01JQ8Z…' },
-        ],
-        responseStatus: '204 No Content',
-      },
-      {
-        id: 'list-deliveries',
-        method: 'GET',
-        path: '/v1/projects/{projectId}/webhooks/{webhookId}/deliveries',
-        summary: 'What a webhook has been told',
-        description: 'One attempt each: the event, the document, what the receiver answered, and when it will be tried again.',
-        auth: 'person',
-        parameters: [
-          PROJECT_ID,
-          { in: 'path', name: 'webhookId', type: 'string', required: true, description: 'The webhook.', example: '01JQ8Z…' },
-          LIMIT,
-          NEXT_TOKEN,
-        ],
-        responseStatus: '200 OK',
-        responseExample: `{
-  "items": [
-    { "deliveryId": "01JQ8Z…", "event": "publish", "documentId": "pricing", "status": 200, "attempts": 1, "deliveredAt": "2026-03-02T10:00:00.000Z" }
-  ],
-  "nextToken": null
-}`,
-        notes: ['A delivery is remembered for fourteen days and then pruned, which is what the TTL on the row is for.'],
       },
     ],
   },

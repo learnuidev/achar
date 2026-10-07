@@ -110,21 +110,18 @@ function MethodBadge({ method }: { method: ApiEndpoint['method'] }) {
 }
 
 /**
- * Who may call it — the one fact that decides whether a reader keeps reading.
+ * Whether a credential is needed — the one fact that decides whether a reader keeps
+ * reading.
  *
- * Said in words rather than in a legend, because "token" and "person" are this
- * API's own two kinds of caller and a footnote somewhere else on the page would be
- * a footnote a reader does not have.
+ * Said in words rather than in a legend, because a footnote elsewhere on the page is
+ * a footnote a reader does not have. Every route here is one an API token reaches, so
+ * the badge never has to say which kind of caller it means: the only two answers are
+ * that there is no credential and that the credential is a token.
  */
 function AuthBadge({ auth }: { auth: ApiEndpoint['auth'] }) {
-  const label =
-    auth === 'none' ? 'No credential' : auth === 'token' ? 'API token' : 'Signed-in person';
+  const label = auth === 'none' ? 'No credential' : 'API token';
   const tone =
-    auth === 'none'
-      ? 'border-border text-muted-foreground'
-      : auth === 'token'
-        ? 'border-primary/40 text-primary'
-        : 'border-border text-muted-foreground';
+    auth === 'none' ? 'border-border text-muted-foreground' : 'border-primary/40 text-primary';
 
   return (
     <span className={cn('rounded-full border px-2 py-0.5 text-xs', tone)} title={authTitle(auth)}>
@@ -134,11 +131,9 @@ function AuthBadge({ auth }: { auth: ApiEndpoint['auth'] }) {
 }
 
 function authTitle(auth: ApiEndpoint['auth']): string {
-  if (auth === 'none') return 'Anyone. This route is the one that answers without a credential.';
-  if (auth === 'token') {
-    return 'An API token, verified by the handler. This is the credential a script or a site uses, and the one the playground can hold.';
-  }
-  return 'A signed-in person’s Cognito ID token, verified at the API Gateway before any handler runs. An API token is refused there.';
+  return auth === 'none'
+    ? 'Anyone. This route is the one that answers without a credential.'
+    : 'An API token, verified by the handler. This is the credential a script or a site uses, and the one the playground can hold.';
 }
 
 /** A table of fields, in the order the card documents them. */

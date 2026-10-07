@@ -15,9 +15,8 @@ import { bodyFor, pathFor, type ExampleValues } from '@/lib/api-example';
  * ours in the middle: the request goes from the browser to the API, which is why
  * CORS is configured on the API for exactly these origins.
  *
- * Only the routes the *handler* authenticates can be tried, because only those take
- * a token — a gateway-authorised route needs a signed-in person's ID token, which a
- * public page does not have and should not. `triesInBrowser` is that rule.
+ * Every route in this reference takes an API token, because that is what the
+ * reference is: the routes a gateway authorizer would refuse were left out of it.
  */
 
 export interface PlaygroundResult {
@@ -27,11 +26,6 @@ export interface PlaygroundResult {
   /** The response as it arrived, pretty-printed when it was JSON. */
   body: string;
   contentType: string;
-}
-
-/** Whether this endpoint can be called from a page like this one at all. */
-export function triesInBrowser(endpoint: ApiEndpoint): boolean {
-  return endpoint.auth === 'token' || endpoint.auth === 'none';
 }
 
 export interface RunInput {
