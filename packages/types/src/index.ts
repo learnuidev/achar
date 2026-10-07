@@ -327,7 +327,68 @@ export interface AcharDocument extends DocumentStub {
    * two documents itself.
    */
   _untranslated?: string[];
+  /**
+   * Where each language's values came from, and whether a person has approved
+   * them — keyed by language code. See `TranslationRecord`.
+   *
+   * Absent on a document no model has translated, which is the ordinary case: a
+   * document written in one language has no languages to keep books about. A
+   * surface that draws a translation should read it, because it is the difference
+   * between words a person wrote and words a model did.
+   */
+  _translations?: Record<string, TranslationRecord>;
   [field: string]: unknown;
+}
+
+/**
+ * Where one language's values came from, and who has taken responsibility for them.
+ *
+ * The whole of the AI story is this record. A model may write a translation — that
+ * is what `POST /v1/data/translate/…` does — but it writes it into the **draft**,
+ * marked `ai` and unapproved, and **a publish is refused while any language is
+ * marked that way**. So a machine can do the work and cannot ship it: the step
+ * between the two is a person reading it and saying so, which is what `approve`
+ * records and the only thing that clears the refusal. Approving needs a *person* —
+ * a request carrying an API token is refused, because a machine cannot be the human
+ * in "needs a human".
+ *
+ * `source: 'human'` is not a claim about who typed — this API cannot tell an editor
+ * from a migration script — it is the absence of the model: values that arrived from
+ * anywhere other than the translation route. What `ai` tells a reader is "a model
+ * wrote the words in this language"; what `approvedBy` adds is that somebody has
+ * since read them.
+ *
+ * An approval is of a **particular text**, so editing a language's values clears it:
+ * what was approved is no longer what the row holds.
+ */
+export interface TranslationRecord {
+  /** `ai` when the translation route wrote these values, `human` when anything else did. */
+  source: 'ai' | 'human';
+  /** The model, on an `ai` record — `anthropic.claude-3-5-haiku-20241022-v1:0`. */
+  model?: string | null;
+  /** When the values were written. ISO 8601. */
+  at: string;
+  /** Who approved them, or absent while nobody has. */
+  approvedBy?: string | null;
+  /** When they approved them, or absent. */
+  approvedAt?: string | null;
+}
+
+/** What a translation did — `POST /v1/data/translate/{p}/{d}`. */
+export interface TranslationResult {
+  documentId: string;
+  /** The language translated into. */
+  language: string;
+  /** The language it was translated from. */
+  from: string;
+  /** The model that did it, as the deployment configured it. */
+  model: string;
+  /** The field paths it wrote, in the schema's own spelling — `title`, `seo.note`. */
+  fields: string[];
+  /** Paths it left alone: a field with nothing in it to translate, an asset, a number. */
+  skipped: string[];
+  /** The draft as it now stands, in the stored shape — every language, maps and all. */
+  document: AcharDocument;
 }
 
 /** What a list shows about a document without reading all of it. */
@@ -423,7 +484,8 @@ export type MutationOperation =
   | 'delete'
   | 'publish'
   | 'unpublish'
-  | 'restore';
+  | 'restore'
+  | 'approve';
 
 export interface MutationResult {
   documentId: string;
@@ -490,6 +552,20 @@ export interface DocumentMutation {
    * `publish` is the next step, and it is the one that changes the site.
    */
   restore?: { id: string; version: number };
+  /**
+   * Take responsibility for a language a model translated.
+   *
+   * `approve` changes no content: it records that a person has read the values in
+   * those languages and stands behind them, which is the one thing that lets a
+   * document holding AI translations be published. It is a write of its own rather
+   * than a side effect of a save, because "somebody edited this" and "somebody
+   * vouched for this" are different facts and only the second one is an approval.
+   *
+   * A language the document has no `ai` record for is refused rather than ignored:
+   * approving English, which no model wrote, would be a person signing something
+   * nobody asked them to sign.
+   */
+  approve?: { id: string; languages: string[] };
 }
 
 /**

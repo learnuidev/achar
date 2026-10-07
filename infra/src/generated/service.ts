@@ -768,6 +768,19 @@ export const FUNCTIONS: FunctionSpec[] = [
     description: 'Apply an ordered batch of mutations, and enqueue what changed.',
     http: [{ path: '/v1/data/mutate/{projectId}/{dataset}', method: 'POST', authorized: false }],
   },
+  {
+    key: 'translate-document',
+    entry: 'src/functions/data/translate.ts',
+    handlerExport: 'handler',
+    // The whole 29 seconds an HTTP API will wait, because the work *is* a model call:
+    // a document of any size is one request to Bedrock, and the gateway's ceiling is
+    // the smaller of the two. A document too large to answer inside it is translated
+    // in pieces — which is what the request's `fields` is for.
+    timeout: 29,
+    memorySize: 1024,
+    description: 'Translate a document’s fields into one of its dataset’s languages, as a draft.',
+    http: [{ path: '/v1/data/translate/{projectId}/{dataset}', method: 'POST', authorized: false }],
+  },
 
   // ── assets ─────────────────────────────────────────────────────────────────
   {

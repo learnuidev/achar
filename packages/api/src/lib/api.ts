@@ -23,6 +23,7 @@ import type {
   ProjectRole,
   QueryRequest,
   QueryResult,
+  TranslationResult,
   Webhook,
   WebhookDelivery,
 } from '@achar/types';
@@ -272,6 +273,37 @@ export class AcharClient {
     documentId: string,
   ): Promise<MutationResponse> {
     return documents.discardDraft(this.context, projectId, dataset, documentId);
+  }
+
+  /**
+   * A model translates a document into one of its languages, as the draft.
+   *
+   * The document comes back marked `ai` and unapproved, and publishing it is refused
+   * until `approveTranslations` — which is the point of the call, not a side effect
+   * of it. See `TranslateRequest`.
+   */
+  translateDocument(
+    projectId: string,
+    dataset: string,
+    req: documents.TranslateRequest,
+  ): Promise<TranslationResult> {
+    return documents.translateDocument(this.context, projectId, dataset, req);
+  }
+
+  /**
+   * Take responsibility for a language a model translated.
+   *
+   * A person's act: the API refuses an API token, so a pipeline cannot approve what
+   * it generated. The one call that lets a document holding AI translations be
+   * published.
+   */
+  approveTranslations(
+    projectId: string,
+    dataset: string,
+    documentId: string,
+    languages: string[],
+  ): Promise<MutationResponse> {
+    return documents.approveTranslations(this.context, projectId, dataset, documentId, languages);
   }
 
   /** What a document has said, every time it was published — newest first. */

@@ -241,6 +241,15 @@ function resolveOne(
   path: string,
   untranslated: string[],
 ): unknown {
+  // A localized field is answered the same way wherever it sits — an item of a list
+  // is a field like any other, and a list of translated phrases is a shape somebody
+  // modeling content can reasonably want.
+  if (field.localized) {
+    const answer = languageValue(value, language, defaultLanguage);
+    if (answer.untranslated) untranslated.push(path);
+    return answer.value;
+  }
+
   switch (field.type) {
     case 'object':
       return isRecord(value)
@@ -265,6 +274,179 @@ function resolveOne(
   }
 }
 
+/**
+ * `pt-BR` reads as "Brazilian Portuguese"; a code nothing can name comes back as it
+ * was written.
+ *
+ * Here rather than in the app that draws it because two places need it and they are
+ * not the same runtime: a studio draws a language in a select, and the API names one
+ * in the prompt it sends a model — "translate into Brazilian Portuguese" is a
+ * different instruction from "translate into pt-BR", and the difference is worth one
+ * implementation rather than two that drift.
+ *
+ * Two things end at the raw code, and both are ordinary: a language the runtime's
+ * ICU data does not know, which `Intl` answers with the code itself, and a string
+ * that is not a language code at all, like the private tag `x-internal` the API
+ * accepts, which `Intl` refuses with a `RangeError`. A guessed name would be worse
+ * than the code in both cases, and the code is what the dataset stores anyway.
+ */
+export function languageName(code: string): string {
+  const trimmed = code.trim();
+  if (!trimmed) return code;
+
+  try {
+    const names = displayNames();
+    if (!names) return trimmed;
+    const name = names.of(trimmed);
+    // The dataset's spelling is what queries and the editor carry, so it wins when
+    // `of` merely echoes the code back — which it does, lowercased.
+    return name && name.toLowerCase() !== trimmed.toLowerCase() ? name : trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+// Built once and on first use: constructing `Intl.DisplayNames` is not cheap, and a
+// list of six languages would otherwise build six of them. `undefined` because the
+// runtime may not have it at all, which is what the fallback above is for.
+let displayNameCache: Intl.DisplayNames | null | undefined;
+
+function displayNames(): Intl.DisplayNames | null {
+  if (displayNameCache === undefined) {
+    displayNameCache =
+      typeof Intl.DisplayNames === 'function'
+        ? new Intl.DisplayNames(undefined, { type: 'language' })
+        : null;
+  }
+  return displayNameCache;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The languages whose values differ between two versions of a document.
+ *
+ * This is what makes an approval mean something. An approval is of a particular
+ * text, so a write that changes a language has to be able to say *which* language it
+ * changed — otherwise an editor fixing an English typo would either void the French
+ * approval or, worse, leave the French approval standing over text that had changed
+ * underneath it.
+ *
+ * A walk of the type, and a comparison of the **documents** rather than of the
+ * request: a client that sends the whole document back — which is what the studio
+ * does — names no language at all, so the only honest answer to "which language
+ * changed" is the one that reads both versions of it.
+ */
+export function changedLanguages(
+  type: SchemaType,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): string[] {
+  const found = new Set<string>();
+  compareFields(type.fields, before, after, found);
+  return [...found];
+}
+
+function compareFields(
+  fields: SchemaField[],
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+  found: Set<string>,
+): void {
+  for (const field of fields) {
+    const was = before?.[field.name];
+    const now = after?.[field.name];
+
+    if (field.localized) {
+      for (const language of languagesIn(was, now)) {
+        if (!sameValue(mapValue(was, language), mapValue(now, language))) found.add(language);
+      }
+      continue;
+    }
+
+    switch (field.type) {
+      case 'object':
+        compareFields(field.fields ?? [], asRecord(was), asRecord(now), found);
+        break;
+      case 'array':
+        compareItems(field, was, now, found);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+/** A list: one item shape repeated, so index against index. */
+function compareItems(field: SchemaField, was: unknown, now: unknown, found: Set<string>): void {
+  const before = Array.isArray(was) ? was : [];
+  const after = Array.isArray(now) ? now : [];
+  const members = field.of ?? [];
+
+  for (let index = 0; index < Math.max(before.length, after.length); index += 1) {
+    for (const member of members) {
+      if (member.localized) {
+        for (const language of languagesIn(before[index], after[index])) {
+          if (!sameValue(mapValue(before[index], language), mapValue(after[index], language))) {
+            found.add(language);
+          }
+        }
+        continue;
+      }
+      if (member.type !== 'object') continue;
+      compareFields(member.fields ?? [], asRecord(before[index]), asRecord(after[index]), found);
+    }
+  }
+}
+
+/**
+ * Every language either version could be in: the keys of a map, and nothing for a
+ * value that is not one.
+ *
+ * A plain value is the default language's, but which language that is is the
+ * dataset's business and this function is not given it — so a plain value
+ * contributes no language, and a value that *became* a map contributes the keys it
+ * has. The comparison then sees `undefined` against the new value, which is a change
+ * in the language it landed in, which is the truth.
+ */
+function languagesIn(was: unknown, now: unknown): string[] {
+  const keys = new Set<string>();
+  for (const value of [was, now]) {
+    if (!isLanguageMap(value)) continue;
+    for (const key of Object.keys(value)) keys.add(key);
+  }
+  return [...keys];
+}
+
+function mapValue(value: unknown, language: string): unknown {
+  return isLanguageMap(value) ? value[language] : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+/**
+ * Whether two stored values say the same thing.
+ *
+ * Deep and order-insensitive, because `JSON.stringify` is not: a document that came
+ * back from a read with its keys in another order would look changed, and the cost of
+ * that mistake is an approval quietly withdrawn every time somebody saves.
+ */
+function sameValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((entry, index) => sameValue(entry, right[index]));
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const names = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const name of names) {
+      if (!sameValue(left[name], right[name])) return false;
+    }
+    return true;
+  }
+  return false;
 }

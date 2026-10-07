@@ -13,7 +13,7 @@ import type { Construct } from 'constructs';
 
 import { bundle } from '../bundling.ts';
 import type { AcharConfig } from '../config.ts';
-import { appOrigins } from '../config.ts';
+import { appOrigins, translationModelOf } from '../config.ts';
 import { FUNCTIONS, SERVICE_DEFAULTS, SERVICE_VERSION, TABLES } from '../generated/service.ts';
 import { functionName as lambdaName, pascal, routePath } from '../naming.ts';
 import type { HttpRouteSpec } from '../types.ts';
@@ -97,6 +97,28 @@ export class AcharApiStack extends Stack {
     media.assetsBucket.grantReadWrite(role);
     webhookQueue.grantSendMessages(role);
 
+    /**
+     * Bedrock, for the one handler that translates.
+     *
+     * The credential is this role rather than an API key, which is the reason the
+     * provider is Bedrock at all: there is no secret to store, rotate or leak. The
+     * resource is two patterns rather than one because a model id is either a
+     * foundation model in this region or a cross-region inference profile — the
+     * `us.…` kind — and a profile is an account-owned resource that fans out to
+     * models in other regions. Narrowing this to the configured model would be a
+     * policy that breaks the day somebody switches to a profile, which is a worse
+     * failure than a grant wider than the one model it is used for.
+     */
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [
+          `arn:aws:bedrock:${config.region}::foundation-model/*`,
+          `arn:aws:bedrock:*:${config.account}:inference-profile/*`,
+        ],
+      }),
+    );
+
     const environment: Record<string, string> = {
       STAGE: config.stage,
       REGION: config.region,
@@ -106,6 +128,10 @@ export class AcharApiStack extends Stack {
       USER_POOL_ID: auth.userPool.userPoolId,
       USER_POOL_CLIENT_ID: auth.userPoolClientId,
       WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
+      // Empty when the stage has not chosen one, which the translate route answers
+      // as "not configured" rather than guessing a model id: a wrong id fails with
+      // `AccessDeniedException`, which reads like a permissions problem and is not.
+      TRANSLATION_MODEL: translationModelOf(config),
     };
 
     for (const table of TABLES) {

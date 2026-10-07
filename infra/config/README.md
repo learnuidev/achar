@@ -55,6 +55,7 @@ become a table name of `undefined` in thirty-eight Lambdas.
 | `auth.googleClientId` | The OAuth client. **Empty is a valid answer** — a pool with no Google provider is a perfectly good pool, and an environment can be deployed before anybody has registered a client |
 | `auth.callbackUrls`, `auth.logoutUrls` | Where Cognito may send people. Must include each app's origin and its `/auth/callback` |
 | `googleClientSecretName` | The *name* of the Secrets Manager secret holding the Google client secret. Never the secret |
+| `translation.model` | Optional. The **Bedrock** model id that translates content — a foundation model in this region, or a cross-region inference profile (`us.…`). Absent means this stage does not translate, and the route answers 501 rather than guessing a model |
 
 ## What is deliberately not in it
 
@@ -62,7 +63,13 @@ become a table name of `undefined` in thirty-eight Lambdas.
 file holds its name. The CloudFront and Stripe credentials that `play` keeps
 parameters for have no equivalent here: Achar's assets are published content
 served from an open CDN, so there is no signing key to manage — see the media
-stack's own note for why.
+stack's own note for why. `translation.model` is a model *id* and not a credential
+for the same reason: Bedrock is called with the Lambda's own IAM role.
+
+**No model access.** Which models an account may invoke is granted in the Bedrock
+console, not by a deploy — so a stage whose `translation.model` names a model nobody
+has enabled fails at the first translation with the provider's own sentence about it.
+That is the one step of setting translation up that a person does by hand.
 
 ## The file in this directory
 

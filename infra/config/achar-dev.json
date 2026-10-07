@@ -2,6 +2,9 @@
   "stage": "dev",
   "account": "765302404291",
   "region": "us-east-1",
+  "translation": {
+    "model": "anthropic.claude-3-5-haiku-20241022-v1:0"
+  },
   "ownership": {
     "tables": true,
     "media": true,
@@ -29,5 +32,8 @@
       "https://dev.achar.app"
     ]
   },
-  "googleClientSecretName": "achar/dev/google-client-secret"
+  "googleClientSecretName": "achar/dev/google-client-secret",
+  "translation": {
+    "model": "anthropic.claude-3-5-haiku-20241022-v1:0"
+  }
 }

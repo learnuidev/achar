@@ -9,6 +9,7 @@ import type {
   Perspective,
   QueryRequest,
   QueryResult,
+  TranslationResult,
 } from '@achar/types';
 
 import { queryString, segment, type ApiContext } from '../../lib/context';
@@ -248,4 +249,64 @@ export function discardDraft(
 ): Promise<MutationResponse> {
   const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`;
   return mutate(api, projectId, dataset, { mutations: [{ delete: { id: draftId } }] });
+}
+
+/** What a translation asks for. */
+export interface TranslateRequest {
+  /** The document to translate. */
+  id: string;
+  /** The language to translate into — one of the dataset's `languages`. */
+  language: string;
+  /** The language to translate from. Absent means the dataset's default language. */
+  from?: string;
+  /**
+   * Only these field paths, and anything under them.
+   *
+   * The escape hatch for a document too large for one model call: asking for
+   * `['title', 'excerpt']` is a small, fast request a caller can repeat, and a
+   * request that outlives the gateway's 29 seconds has no answer at all.
+   */
+  fields?: string[];
+}
+
+/**
+ * Translate a document's fields into one of its languages, as the draft.
+ *
+ * **A model wrote it, and the document says so.** What comes back is a
+ * `TranslationResult` whose document carries `_translations[language]` marked `ai`
+ * and unapproved, and **publishing is refused until somebody approves it** — see
+ * `approveTranslations`. That is the whole deal this call makes: it does the work and
+ * it does not ship it, and neither half can happen without the other.
+ *
+ * The fields it could not translate come back in `skipped` — an empty field, an
+ * asset, a field the schema does not declare — so a caller can tell "translated
+ * everything" from "translated what there was".
+ */
+export function translateDocument(
+  api: ApiContext,
+  projectId: string,
+  dataset: string,
+  req: TranslateRequest,
+): Promise<TranslationResult> {
+  return api.post<TranslationResult>(`/v1/data/translate/${projectId}/${dataset}`, req);
+}
+
+/**
+ * Approve a language a model translated. **A person's act, not a machine's.**
+ *
+ * The API refuses this from a request carrying an API token — a script cannot be the
+ * human in "needs a human" — so this is a call a signed-in studio makes and a build
+ * pipeline cannot. It changes no content: it records that somebody read the text and
+ * stands behind it, and it is the only thing that lets the document be published.
+ */
+export function approveTranslations(
+  api: ApiContext,
+  projectId: string,
+  dataset: string,
+  documentId: string,
+  languages: string[],
+): Promise<MutationResponse> {
+  return mutate(api, projectId, dataset, {
+    mutations: [{ approve: { id: documentId, languages } }],
+  });
 }

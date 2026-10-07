@@ -107,7 +107,46 @@ export interface AcharConfig {
   auth: AuthSettings;
   /** The Secrets Manager secret a created pool reads the Google client secret from. */
   googleClientSecretName: string;
+  /**
+   * What translates content, when a stage has decided to pay for it.
+   *
+   * Absent is a stage that does not translate, and that is the default rather than an
+   * oversight: a model call costs money per request, so a deployment that has never
+   * been told which model to use answers "not configured" instead of guessing one.
+   * See `translationModelOf`.
+   */
+  translation?: TranslationSettings;
   ownership: Ownership;
+}
+
+/**
+ * The model a stage translates with.
+ *
+ * A **Bedrock** model id, and the whole of what this file needs to know about the
+ * provider: the handler calls Bedrock with the Lambda's own IAM role, so there is no
+ * key here and nothing to rotate. Either form of id works — a foundation model in the
+ * deployment's own region (`anthropic.claude-3-5-haiku-20241022-v1:0`) or a
+ * cross-region inference profile (`us.anthropic.claude-3-5-haiku-20241022-v1:0`).
+ *
+ * The account also has to have been granted access to that model in the Bedrock
+ * console, which is not something a deploy can do: an ungranted model fails at the
+ * first translation, with the provider's own sentence about it rather than a
+ * rewritten one.
+ */
+export interface TranslationSettings {
+  model: string;
+}
+
+/**
+ * The model a stage translates with, or the empty string.
+ *
+ * The empty string rather than nothing, because an environment variable that is
+ * absent and one that is empty are the same thing to a Lambda — and the handler reads
+ * both as "this deployment does not translate", which is a 501 naming the variable
+ * rather than a guess at a model id.
+ */
+export function translationModelOf(config: AcharConfig): string {
+  return config.translation?.model?.trim() ?? '';
 }
 
 /**

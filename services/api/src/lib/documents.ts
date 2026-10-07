@@ -37,6 +37,7 @@ import type {
   ProjectRole,
   SchemaField,
   SchemaType,
+  TranslationRecord,
 } from '@achar/types';
 import {
   Keys,
@@ -54,7 +55,16 @@ import {
   type Item,
   type Key,
 } from './dynamo';
-import { coalesceSpans, fieldByPath, isLanguageMap, localizeFields, referenceIdOf, resolveLanguages, shapeDocument } from '@achar/schema';
+import {
+  changedLanguages,
+  coalesceSpans,
+  fieldByPath,
+  isLanguageMap,
+  localizeFields,
+  referenceIdOf,
+  resolveLanguages,
+  shapeDocument,
+} from '@achar/schema';
 import {
   assetIdFromReference,
   assetUrlsForReferences,
@@ -115,6 +125,16 @@ export interface DocumentRow extends Item {
   _createdAt: string;
   _updatedAt: string;
   draft: boolean;
+  /**
+   * Where each language's values came from, and who approved them.
+   *
+   * A row attribute rather than a content field, and returned rather than kept: it
+   * travels with the document through every write — a patch, a publish, a restore —
+   * because it is a fact about the text in the row and the text is what changes. No
+   * caller writes it (`assertWritableFields` refuses the name): a model's translation
+   * and a person's approval are the only two things that add to it.
+   */
+  _translations?: Record<string, TranslationRecord>;
 }
 
 /**
@@ -708,6 +728,96 @@ interface RowSeed {
   fields: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * The row this write replaces, when there was one.
+   *
+   * For the provenance only: which languages a written document no longer agrees
+   * with the approved text about is a question about two versions of the document,
+   * so a write that cannot see the version before it cannot answer it.
+   */
+  before?: DocumentRow;
+  /** The type the document is authored against, for the fields that hold languages. */
+  type?: SchemaType;
+}
+
+/**
+ * The languages a model wrote, and who has approved them, after this write.
+ *
+ * Three rules, and they are the whole of the AI story on the store's side:
+ *
+ * - **Provenance travels with the document.** It is carried from the row before,
+ *   whatever the write was — a patch, a publish, a restore — because it is a fact
+ *   about the text and the text is what a write changes.
+ * - **A write that changes a language clears that language's approval.** What was
+ *   approved was a particular text; the row no longer holds it. A client that sends
+ *   the whole document back names no language, so this is answered by comparing the
+ *   two documents rather than by reading the request (see `changedLanguages`).
+ * - **Only two things add a record**: a model translating (`writtenByModel`), and a
+ *   person approving (`approve`). No caller can write one.
+ */
+function provenanceFor(
+  next: Record<string, unknown>,
+  seed: {
+    before?: DocumentRow;
+    type?: SchemaType;
+    writtenByModel?: { language: string; model: string };
+  },
+): Record<string, TranslationRecord> | undefined {
+  const carried: Record<string, TranslationRecord> = {
+    ...(seed.before?._translations ?? {}),
+    // A restored version carries the record it was published with; merging it over
+    // the current one keeps what the snapshot knew and what the row has since learned.
+    ...(isRecord(next._translations) ? (next._translations as Record<string, TranslationRecord>) : {}),
+  };
+
+  if (seed.type && seed.before) {
+    const changed = changedLanguages(seed.type, seed.before as unknown as Record<string, unknown>, next);
+    for (const language of changed) {
+      const entry = carried[language];
+      if (!entry) continue;
+      carried[language] = { ...entry, approvedBy: null, approvedAt: null };
+    }
+  }
+
+  const model = seed.writtenByModel;
+  if (model) {
+    carried[model.language] = {
+      source: 'ai',
+      model: model.model,
+      at: new Date().toISOString(),
+      approvedBy: null,
+      approvedAt: null,
+    };
+  }
+
+  return Object.keys(carried).length > 0 ? carried : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Refuses a publish while a language a model wrote has not been approved.
+ *
+ * The gate the whole feature exists for, and it is here rather than in a screen
+ * because a screen can be bypassed by a script: a model may write a translation into
+ * a draft, and **nothing ships until a person has read it and said so**. The error
+ * names the languages, and the one call that fixes it is `approve`.
+ */
+function assertTranslationsApproved(row: DocumentRow, documentId: string): void {
+  const unapproved = Object.entries(row._translations ?? {})
+    .filter(([, entry]) => entry.source === 'ai' && !entry.approvedBy)
+    .map(([language]) => language);
+
+  if (unapproved.length === 0) return;
+
+  throw new HttpError(
+    409,
+    'UNAPPROVED_TRANSLATION',
+    `Document ${documentId} holds translations a model wrote that nobody has approved: ${unapproved.join(', ')}`,
+    { documentId, languages: unapproved },
+  );
 }
 
 /**
@@ -764,10 +874,11 @@ function buildRow(seed: RowSeed): DocumentRow {
 
   const id = seed.draft ? draftIdOf(seed.id) : publishedIdOf(seed.id);
   const at = seed.updatedAt ?? new Date().toISOString();
+  const provenance = provenanceFor(fields, seed);
 
   // The internal attributes come after the spread, so a body that happens to
   // carry `draft` or `_rev` cannot disagree with what this row actually is.
-  return {
+  const row: DocumentRow = {
     ...fields,
     documentKey: documentKeyOf(seed.projectId, seed.dataset, id),
     datasetKey: datasetKeyOf(seed.projectId, seed.dataset),
@@ -779,6 +890,11 @@ function buildRow(seed: RowSeed): DocumentRow {
     _updatedAt: at,
     draft: seed.draft,
   };
+
+  if (provenance) row._translations = provenance;
+  else delete row._translations;
+
+  return row;
 }
 
 function conflict(message: string, documentId: string): HttpError {
@@ -841,6 +957,23 @@ export interface MutationContext {
    * `required` most of all, has to be applied to what would actually be stored.
    */
   coerce?: (fields: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * Who is approving a translation, for the `approve` mutation.
+   *
+   * A person's id, and `null` is refused by the route rather than here: this file
+   * writes what it is told, and the rule that an approval needs a person is a rule
+   * about credentials.
+   */
+  approvedBy?: string | null;
+  /**
+   * The language a model wrote through this write, when the caller was the
+   * translation route.
+   *
+   * Set by that route and by nothing else, and it is what records the provenance:
+   * every other write clears approvals and carries records, and only this one *adds*
+   * a record saying a model wrote the text.
+   */
+  aiTranslation?: { language: string; model: string };
 }
 
 export interface MutationInput extends MutationContext {
@@ -1035,6 +1168,7 @@ async function applyOne(
       id,
       draft: true,
       fields: writeFields(context, body),
+      type: typeOfDocument(context, body._type),
     });
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
@@ -1055,6 +1189,8 @@ async function applyOne(
       // A replacement keeps when the document first existed. Not a detail: it is
       // what a studio sorts by and what it draws as "created".
       createdAt: rows.draft?._createdAt ?? rows.published?._createdAt,
+      before: rows.draft ?? rows.published,
+      type: typeOfDocument(context, body._type),
     });
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
@@ -1083,6 +1219,8 @@ async function applyOne(
       draft: true,
       fields: writeFields(context, body),
       createdAt: rows.published?._createdAt,
+      before: rows.published,
+      type: typeOfDocument(context, body._type),
     });
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
     stage(working, row);
@@ -1136,12 +1274,18 @@ async function applyOne(
       });
     }
 
+    // The gate: a model's translation may sit in a draft for as long as it likes,
+    // and this is the one write that puts text in front of readers.
+    assertTranslationsApproved(rows.draft, id);
+
     const published = buildRow({
       ...context,
       id,
       draft: false,
       fields: rows.draft as unknown as Record<string, unknown>,
       createdAt: rows.published?._createdAt ?? rows.draft._createdAt,
+      before: rows.draft,
+      type: typeOfDocument(context, rows.draft._type),
     });
     // The one write where a document has to be whole: this is the row readers get.
     context.validate?.(
@@ -1179,6 +1323,8 @@ async function applyOne(
         draft: true,
         fields: rows.published as unknown as Record<string, unknown>,
         createdAt: rows.published._createdAt,
+        before: rows.published,
+        type: typeOfDocument(context, rows.published._type),
       });
       stage(working, draft);
     }
@@ -1211,6 +1357,8 @@ async function applyOne(
       fields: version.document as Record<string, unknown>,
       // The document was created when it was created; a version is not a new one.
       createdAt: rows.draft?._createdAt ?? rows.published?._createdAt ?? version.document._createdAt,
+      before: rows.draft ?? rows.published,
+      type: typeOfDocument(context, version.document._type),
     });
 
     context.validate?.(toApiDocument(row, { draft: true, published: false, editable: true }), 'draft');
@@ -1225,11 +1373,74 @@ async function applyOne(
     };
   }
 
+  if (mutation.approve) {
+    const id = publishedIdOf(mutation.approve.id);
+    const rows = await currentRows(context, working, id);
+    const base = rows.draft ?? rows.published;
+    if (!base) throw missing(id);
+
+    const record: Record<string, TranslationRecord> = { ...(base._translations ?? {}) };
+    const unknown: string[] = [];
+
+    for (const language of mutation.approve.languages) {
+      const entry = record[language];
+      // Refused rather than ignored: approving a language no model wrote is a person
+      // signing something nobody asked them to sign, and it would leave the document
+      // looking reviewed on the strength of a typo.
+      if (!entry || entry.source !== 'ai') {
+        unknown.push(language);
+        continue;
+      }
+      record[language] = {
+        ...entry,
+        approvedBy: context.approvedBy ?? null,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+
+    if (unknown.length > 0) {
+      throw new HttpError(
+        400,
+        'NOTHING_TO_APPROVE',
+        `No translation a model wrote is waiting for approval in ${unknown.join(', ')}`,
+        {
+          documentId: id,
+          languages: unknown,
+          translated: Object.entries(record)
+            .filter(([, entry]) => entry.source === 'ai')
+            .map(([language]) => language),
+        },
+      );
+    }
+
+    // The draft, like every other content write: approving is a step somebody takes
+    // and publishing is the step that changes what a site serves, so an approval of
+    // the published row would be an approval nobody had a chance to review.
+    const row: DocumentRow = {
+      ...base,
+      documentKey: keyOf(context.projectId, context.dataset, true, id),
+      datasetKey: datasetKeyOf(context.projectId, context.dataset),
+      draft: true,
+      _id: id,
+      _rev: newRev(),
+      _updatedAt: new Date().toISOString(),
+      _translations: record,
+    };
+
+    stage(working, row);
+    return { result: { documentId: id, operation: 'approve', rev: row._rev } };
+  }
+
   throw new HttpError(
     400,
     'BAD_REQUEST',
-    'A mutation must name exactly one of create, createOrReplace, createIfNotExists, patch, delete, publish, unpublish or restore',
+    'A mutation must name exactly one of create, createOrReplace, createIfNotExists, patch, delete, publish, unpublish, restore or approve',
   );
+}
+
+/** The type a document names, for the fields that hold one value per language. */
+function typeOfDocument(context: MutationContext, name: unknown): SchemaType | undefined {
+  return typeof name === 'string' && name ? context.typeOf?.(name) : undefined;
 }
 
 /**
@@ -1320,6 +1531,16 @@ function applyPatch(
 
   if (!typeName) throw new HttpError(400, 'BAD_REQUEST', '_type is required', { field: '_type' });
   next.typeKey = typeKeyOf(context.projectId, context.dataset, typeName);
+
+  // After the write, and after `target` has run: a language a model just wrote is a
+  // record this adds, and one whose text changed is an approval this clears.
+  const provenance = provenanceFor(next, {
+    before: base,
+    type,
+    ...(context.aiTranslation ? { writtenByModel: context.aiTranslation } : {}),
+  });
+  if (provenance) next._translations = provenance;
+  else delete next._translations;
 
   return next;
 }

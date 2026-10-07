@@ -13,11 +13,12 @@
  * happened. A queue that is unavailable is logged and does not fail the write.
  */
 
-import type { AcharDocument, DocumentMutation, MutationOperation, WebhookEvent } from '@achar/types';
+import type { AcharDocument, DocumentMutation } from '@achar/types';
 import { requireDatasetAccess } from '../../lib/access';
 import { requireViewer } from '../../lib/auth';
-import { applyMutations, getDocument } from '../../lib/documents';
+import { applyMutations } from '../../lib/documents';
 import { recordDatasetChange } from '../../lib/datasets';
+import { notify } from '../../lib/events';
 import { languagesOf, sameLanguage } from '../../lib/languages';
 import {
   HttpError,
@@ -30,7 +31,6 @@ import {
   type ApiEvent,
 } from '../../lib/http';
 import { assertValidDocument, coerceDocumentFields, documentType, getDatasetSchema } from '../../lib/schemas';
-import { queueWebhookEvents } from '../../lib/webhooks';
 
 /** Exactly one of these names each element of a batch, and that is the shape. */
 const OPERATIONS = [
@@ -42,6 +42,7 @@ const OPERATIONS = [
   'publish',
   'unpublish',
   'restore',
+  'approve',
 ] as const;
 
 async function main(event: ApiEvent) {
@@ -59,6 +60,22 @@ async function main(event: ApiEvent) {
   // value stored under a key no read will ever look up.
   const datasetLanguages = languagesOf(access.dataset);
   for (const mutation of mutations) assertKnownLanguages(mutation, datasetLanguages);
+
+  /**
+   * **An approval needs a person.** A model may translate and a script may write,
+   * but "needs human approval" cannot be satisfied by a credential that is not a
+   * human — so a request carrying an API token is refused here rather than being
+   * recorded as a person's approval with a token's id in `approvedBy`.
+   */
+  const approvals = mutations.filter((mutation) => mutation.approve);
+  if (approvals.length > 0 && viewer.kind === 'token') {
+    throw new HttpError(
+      403,
+      'APPROVAL_REQUIRES_A_PERSON',
+      'A translation is approved by a person, so a request carrying an API token cannot approve one',
+      { mutations: approvals.map((mutation) => mutation.approve?.id) },
+    );
+  }
 
   // Read once for the whole batch rather than per mutation: the schema is what
   // decides whether a document is a document, and a batch that fetched it three
@@ -88,6 +105,8 @@ async function main(event: ApiEvent) {
     // Recorded on the version a publish leaves behind, so a history says who
     // published what rather than only when.
     publishedBy: viewer.userId,
+    // And on the approval, which is only ever a person's — see the check above.
+    approvedBy: viewer.kind === 'user' ? viewer.userId : null,
   });
 
   if (applied.created || applied.deleted) {
@@ -102,51 +121,6 @@ async function main(event: ApiEvent) {
   await notify(projectId, dataset, applied.results);
 
   return json({ results: applied.results, transactionId: applied.transactionId });
-}
-
-/**
- * Queues an event per document the batch changed.
- *
- * The document is read back at `raw` rather than threaded out of
- * `applyMutations`: what a receiver is told should be the document as it stands
- * now, which for a publish is the published row and for an unpublish is the
- * draft that survived. The last operation on a document wins when a batch
- * touched it more than once, because "created and then edited" is one change to
- * everything outside this API.
- */
-async function notify(
-  projectId: string,
-  dataset: string,
-  results: { documentId: string; operation: MutationOperation }[],
-): Promise<void> {
-  const latest = new Map<string, MutationOperation>();
-  for (const result of results) latest.set(result.documentId, result.operation);
-
-  for (const [documentId, operation] of latest) {
-    const document = await getDocument(projectId, dataset, documentId, 'raw', false);
-    await queueWebhookEvents({
-      projectId,
-      dataset,
-      event: eventOf(operation),
-      documentId,
-      document: document ?? null,
-    });
-  }
-}
-
-/**
- * A mutation as the event a receiver subscribes to.
- *
- * There are four events and six mutations, and the two that do not have one of
- * their own are the two that are edits: `unpublish` is content changing, and a
- * receiver that wanted to know about publications says so by subscribing to
- * `publish` alone.
- */
-function eventOf(operation: MutationOperation): WebhookEvent {
-  if (operation === 'create') return 'create';
-  if (operation === 'delete') return 'delete';
-  if (operation === 'publish') return 'publish';
-  return 'update';
 }
 
 /**
