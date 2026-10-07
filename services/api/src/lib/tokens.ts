@@ -44,10 +44,14 @@ export function toApiToken(row: TokenRow): ApiToken {
 }
 
 /**
- * A project's tokens, newest first.
+ * A project's tokens, newest first, **revoked ones included**.
  *
- * Revoked ones are included and marked: a list that hid them would make
- * "did somebody take this away" unanswerable from the screen that took it away.
+ * This route answers with the record rather than with what is in service: a token
+ * that was taken out of service is still a credential that existed, and "what was
+ * that and when did it stop" is a question only this answer can settle. The studio
+ * is where the two are told apart — it lists what is in service and says so — which
+ * is the right place for that judgement, because it is a screen talking to a person
+ * rather than an API answering one.
  */
 export async function listTokens(projectId: string): Promise<TokenRow[]> {
   return queryAll<TokenRow>('TokensTable', {
@@ -86,8 +90,11 @@ export async function issueToken(input: IssueTokenInput): Promise<IssuedApiToken
     dataset: input.dataset ?? null,
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy,
-    lastUsedAt: null,
-    revokedAt: null,
+    // `lastUsedAt` and `revokedAt` are deliberately **absent** rather than `null`.
+    // A NULL is a value that is there, so `attribute_not_exists(revokedAt)` — the
+    // condition that stops a revoke from rewriting when a token was first taken
+    // out of service — is false against a row that carries one, and revoking such
+    // a token silently did nothing. Nothing is what "not yet revoked" should be.
     secretHash: hashSecret(plaintext),
   };
 
@@ -115,8 +122,13 @@ export async function revokeToken(projectId: string, tokenId: string): Promise<T
   const revokedAt = new Date().toISOString();
   const outcome = await tryUpdateItem<TokenRow>('TokensTable', Keys.token(tokenId), {
     set: { revokedAt },
-    condition: 'attribute_not_exists(#revokedAt)',
+    // Absent, or a NULL — because both mean the same thing here and only one of
+    // them is what this API writes now. A row created before the fix above carries
+    // `revokedAt: null`, and a condition that refused it would be a token nobody
+    // could ever take out of service.
+    condition: 'attribute_not_exists(#revokedAt) OR attribute_type(#revokedAt, :null)',
     names: { '#revokedAt': 'revokedAt' },
+    values: { ':null': 'NULL' },
     returnValues: 'ALL_NEW',
   });
 

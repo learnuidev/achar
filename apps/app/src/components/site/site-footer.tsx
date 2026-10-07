@@ -15,6 +15,7 @@ const COLUMNS = [
     title: 'Product',
     links: [
       { label: 'Overview', href: '/product' },
+      { label: 'API reference', href: '/docs' },
       { label: 'The content lake', href: '/product#lake' },
       { label: 'GROQ', href: '/product#groq' },
       { label: 'The studio', href: '/product#studio' },

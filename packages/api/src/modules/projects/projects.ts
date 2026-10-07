@@ -1,4 +1,4 @@
-import type { Project } from '@achar/types';
+import type { ListResponse, Project } from '@achar/types';
 
 import type { ApiContext } from '../../lib/context';
 
@@ -21,9 +21,22 @@ export interface UpdateProjectBody {
   description?: string;
 }
 
-/** The projects the caller is an active member of, newest first. */
-export function listProjects(api: ApiContext): Promise<Project[]> {
-  return api.get<Project[]>('/v1/projects');
+/**
+ * The projects the caller is an active member of, newest first.
+ *
+ * **A `ListResponse`, not an array.** This route answers `{ items, nextToken }` —
+ * the same envelope the asset library uses, because a person can belong to enough
+ * projects for a page to be a real question — and this signature said `Project[]`
+ * for as long as the apps happened to normalise it through `asList` on the way in.
+ * A type that disagrees with the route is a type that lets a caller write
+ * `projects.filter(...)` and find out at runtime, which is exactly what happened.
+ *
+ * `nextToken` is null in practice: the route reads every membership and answers
+ * the whole set. It is in the envelope because the shape is the API's, not because
+ * this route has a second page to give.
+ */
+export function listProjects(api: ApiContext): Promise<ListResponse<Project>> {
+  return api.get<ListResponse<Project>>('/v1/projects');
 }
 
 export function createProject(api: ApiContext, body: CreateProjectBody): Promise<Project> {

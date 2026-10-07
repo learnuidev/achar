@@ -30,13 +30,20 @@ import { siteUrl } from '@/lib/site';
  * reason the chrome lives here: the studio's title is its own, and a marketing
  * site's tagline is not a fact about a schema editor.
  *
- * The bar is the one thing in this frame that changes with who is looking: somebody
- * who is already signed in is offered the studio rather than an account. So the
- * session's provider is mounted here and read under it in the header — and only
- * when there is a pool to read one from, because `AuthProvider` with no config
- * answers with its "sign-in is not configured" screen, which is the right answer
- * for the studio and would take the whole public site offline. A site with no pool
- * still has to render: its content has a seed fallback for exactly that.
+ * **The session is mounted for the whole surface, not for the bar alone.** The bar
+ * was the first thing that needed it — somebody already signed in is offered the
+ * studio rather than an account — and the API reference's playground is the second:
+ * a signed-in reader can mint a token there and run the requests with it, which is a
+ * thing a page can only offer if it can ask who is looking. Mounting the provider
+ * around the chrome and the page costs one client component at the top of the tree
+ * and no extra bytes the header was not already pulling in.
+ *
+ * It is mounted **only when there is a pool to read a session from**: `AuthProvider`
+ * with no config answers with its "sign-in is not configured" screen, which is the
+ * right answer for the studio and would take the whole public site offline. A site
+ * with no pool still has to render — its content has a seed fallback for exactly
+ * that — and with no provider the docs offer the paste box and no minting, which is
+ * the honest version of the same page.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings();
@@ -76,17 +83,21 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       {/* The column that used to be the `<body>`, which the root layout owns now
           and which the studio renders into as well. */}
       <div className="flex min-h-dvh flex-col">
-        {/* Wrapped rather than conditionally rendered from the inside: the bar is
-            a server component, and which pair of buttons it draws is the one thing
-            it cannot work out for itself. */}
+        {/* Wrapped rather than conditionally rendered from the inside: the bar is a
+            server component, and which pair of buttons it draws is the one thing it
+            cannot work out for itself. The page is inside the same provider because
+            the docs playground asks the same question. */}
         {config ? (
           <AuthProvider config={config}>
             <SiteHeader primaryCta={settings.primaryCta} withSession />
+            <main className="flex-1">{children}</main>
           </AuthProvider>
         ) : (
-          <SiteHeader primaryCta={settings.primaryCta} />
+          <>
+            <SiteHeader primaryCta={settings.primaryCta} />
+            <main className="flex-1">{children}</main>
+          </>
         )}
-        <main className="flex-1">{children}</main>
         <SiteFooter />
       </div>
       <Toaster />

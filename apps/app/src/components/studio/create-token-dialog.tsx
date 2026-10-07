@@ -44,6 +44,14 @@ const EVERY_DATASET = 'every-dataset';
  * flow, and its Done button is worded as the acknowledgement it is — the loss
  * happens at that click, not at some later accident.
  *
+ * **The caller is told on close, not on success**, and that is load-bearing rather
+ * than tidy. One of the places this dialog is drawn is the empty state at the
+ * bottom of the tokens card — which stops being drawn the moment the project has a
+ * token. Refreshing the caller the instant the issue succeeded unmounted this
+ * component, and the secret went with it: the dialog vanished exactly when it had
+ * something to show. So the refresh waits for the close, which is the first moment
+ * the list behind it is allowed to change shape.
+ *
  * A new token starts at `VIEWER` rather than at the role the person issuing it
  * holds: a script that reads content is the ordinary case, and a key that begins
  * at the least it can be is one whose scope is widened on purpose.
@@ -94,7 +102,8 @@ export function CreateTokenDialog({
     if (!created) return;
 
     setIssued(created);
-    onIssued?.();
+    // No `onIssued()` here — see the note above. The reveal is the rest of this
+    // flow, and the list behind it can wait until the dialog is done.
   }
 
   return (
@@ -102,7 +111,12 @@ export function CreateTokenDialog({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) reset();
+        if (next) return;
+        // Closing is where the caller's read is refreshed, and only when something
+        // was actually issued: a dialog somebody opened and cancelled has nothing to
+        // tell the list about.
+        if (issued) onIssued?.();
+        reset();
       }}
     >
       <DialogTrigger asChild>

@@ -12,7 +12,6 @@ import {
   CardHeader,
   CardTitle,
   Skeleton,
-  cn,
 } from '@achar/ui';
 import { RoleBadge, ToneBadge } from '@/components/studio/badges';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -36,6 +35,13 @@ import { formatDateTime, relativeTime } from '@/lib/format';
  * forbidden: the half is drawn as a note rather than as an error, because "an
  * admin issues your keys" is the sentence that helps and "you are not allowed"
  * is not.
+ *
+ * **A revoked token is not listed.** The API still answers for it — the row is kept
+ * deliberately, because "what was that and when did it stop" is a question a
+ * credential's history should be able to answer — and this screen is about what is
+ * in service now. The two are not in conflict; they are different questions, and the
+ * line under the list says which one this is so that a row leaving the screen does
+ * not read as a delete.
  */
 export function ApiTokensCard({
   tokens,
@@ -45,7 +51,12 @@ export function ApiTokensCard({
   canAdmin: boolean;
 }) {
   const { projectId } = useStudio();
-  const list = tokens.data ?? [];
+  // What is in service. A revoked token is a record rather than a credential, and a
+  // record is not a thing to act on — the API answers with it, and this screen is
+  // about the credentials that still work.
+  const list = (tokens.data ?? []).filter((token) => !token.revokedAt);
+  // Whether the project has ever had one, which is what the empty state below says.
+  const everIssued = (tokens.data ?? []).length > 0;
 
   return (
     <Card>
@@ -78,27 +89,45 @@ export function ApiTokensCard({
         ) : list.length === 0 ? (
           <EmptyState
             icon={<KeyRoundIcon className="size-5" />}
-            title="No tokens yet"
+            title={everIssued ? 'No tokens in service' : 'No tokens yet'}
             description={
-              <>
-                A token is a credential for a program rather than a person: a build script, a nightly
-                job, a site that queries this API while it renders. Issue one and it reaches what its
-                role and dataset allow, with no sign-in and nothing else about the project.
-              </>
+              everIssued ? (
+                <>
+                  Every token this project has issued has been revoked, and revoked tokens are not
+                  listed. Nothing is reaching this project with a machine credential until another
+                  one is issued.
+                </>
+              ) : (
+                <>
+                  A token is a credential for a program rather than a person: a build script, a
+                  nightly job, a site that queries this API while it renders. Issue one and it reaches
+                  what its role and dataset allow, with no sign-in and nothing else about the project.
+                </>
+              )
             }
+            // The dialog is inside the branch that is about to stop being drawn —
+            // which is why it refreshes the caller on close rather than on success,
+            // and why the secret survives being issued here.
             action={<CreateTokenDialog projectId={projectId} onIssued={tokens.refresh} />}
           />
         ) : (
-          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-            {list.map((token) => (
-              <TokenRow
-                key={token.tokenId}
-                projectId={projectId}
-                token={token}
-                onRevoked={tokens.refresh}
-              />
-            ))}
-          </div>
+          <>
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+              {list.map((token) => (
+                <TokenRow
+                  key={token.tokenId}
+                  projectId={projectId}
+                  token={token}
+                  onRevoked={tokens.refresh}
+                />
+              ))}
+            </div>
+
+            <p className="pt-2 text-xs text-muted-foreground">
+              Revoked tokens are not listed — this is what is in service. The API keeps answering for
+              them, so the record of what was issued and when it stopped is not lost.
+            </p>
+          </>
         )}
       </CardContent>
     </Card>
@@ -108,9 +137,9 @@ export function ApiTokensCard({
 /**
  * One token: what it is called, what it may do, and what it has been doing.
  *
- * A revoked token stays on the list rather than disappearing, because a row that
- * vanished and a row that was never there read the same to whoever is checking
- * whether the credential they cut off is really cut off.
+ * Every row here is a working credential, which is why there is no "revoked" state
+ * to draw: revoking takes the row off the list on the next read, and the confirmation
+ * is the toast that says so.
  */
 function TokenRow({
   projectId,
@@ -131,8 +160,6 @@ function TokenRow({
     return tokenId;
   });
 
-  const revoked = Boolean(token.revokedAt);
-
   async function confirm() {
     const revokedId = await revoke.run(token.tokenId);
     if (!revokedId) {
@@ -149,7 +176,7 @@ function TokenRow({
 
   return (
     <>
-      <div className={cn('flex items-start gap-3 px-4 py-3', revoked && 'opacity-60')}>
+      <div className="flex items-start gap-3 px-4 py-3">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-medium">{token.name}</p>
@@ -157,9 +184,6 @@ function TokenRow({
             <ToneBadge tone="neutral" className="font-mono">
               {token.dataset ?? 'every dataset'}
             </ToneBadge>
-            {token.revokedAt && (
-              <ToneBadge tone="neutral">revoked {relativeTime(token.revokedAt)}</ToneBadge>
-            )}
           </div>
 
           <p
@@ -173,17 +197,15 @@ function TokenRow({
           </p>
         </div>
 
-        {!revoked && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setConfirming(true)}
-            aria-label={`Revoke ${token.name}`}
-          >
-            <Trash2Icon />
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setConfirming(true)}
+          aria-label={`Revoke ${token.name}`}
+        >
+          <Trash2Icon />
+        </Button>
       </div>
 
       <ConfirmDialog

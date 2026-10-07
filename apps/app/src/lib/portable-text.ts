@@ -137,25 +137,43 @@ function toChars(spans: EditableSpan[]): MarkedChar[] {
 /**
  * Characters back into spans.
  *
- * Runs of characters with the same marks become one span, which is the invariant
- * the stored shape wants; an empty list becomes a single empty span, which is the
- * other one.
+ * **A run of characters with the same marks is one span, whatever span it came
+ * from.** That is the invariant the stored document wants — `"this is a body"` is
+ * one span, not fourteen — and it is the rule this function got wrong: it only
+ * joined characters that arrived carrying the *same* `from`, and typed characters
+ * carry none at all, so every keystroke became a span of its own. A document that
+ * is correct and unreadable, one `_key` per letter.
+ *
+ * The key rule is what `from` is actually for: a key belongs to one span, so a run
+ * that was split by a mark keeps the key on its first half and the rest are new.
+ * Joining characters that came from different spans therefore keeps the first key
+ * and drops the later ones, which is harmless — a key nothing refers to is an
+ * identity nobody needs, and no two spans end up sharing one.
+ *
+ * An empty list becomes a single empty span, which is the other invariant: an
+ * empty block is a block with an empty run in it, not a block with no runs.
  */
 function fromChars(chars: MarkedChar[]): EditableSpan[] {
   if (chars.length === 0) return [emptySpan()];
 
   const spans: EditableSpan[] = [];
-  // A key belongs to one span: a run that was split by a mark keeps the key on
-  // its first half and the rest are new, which is what stops two spans from
-  // claiming the same identity in the stored document.
   const claimed = new Set<string>();
 
   for (const { char, marks, from } of chars) {
     const last = spans[spans.length - 1];
-    if (last && sameMarks(last.marks, marks) && last._key === from) {
+
+    if (last && sameMarks(last.marks, marks)) {
       last.text += char;
+      // The joined run can still take a key it did not have: the first character
+      // of a run may be one this edit inserted, and the second may be the one that
+      // carried the key.
+      if (!last._key && from && !claimed.has(from)) {
+        last._key = from;
+        claimed.add(from);
+      }
       continue;
     }
+
     const key = from && !claimed.has(from) ? from : undefined;
     if (key) claimed.add(key);
     spans.push({ text: char, marks: [...marks], ...(key ? { _key: key } : {}) });

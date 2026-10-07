@@ -116,7 +116,7 @@ export class AcharClient {
 
   // ── Projects ───────────────────────────────────────────────────────────────
 
-  listProjects(): Promise<Project[]> {
+  listProjects(): Promise<ListResponse<Project>> {
     return projects.listProjects(this.context);
   }
 

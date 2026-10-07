@@ -12,6 +12,13 @@ import { cn } from '@achar/ui';
  * confirmed is under the pointer: this row exists on screens where copying the
  * wrong line is expensive, and it is used most on the one screen — a secret
  * shown once — where a copy that silently failed is unrecoverable.
+ *
+ * **The value wraps rather than truncating.** These are values without spaces in
+ * them — a token, a revision, an asset URL — and one line of them is wider than
+ * any box they are drawn in: an ellipsis hid nineteen characters of a token in the
+ * one place the token exists, and a row that clips the thing it is offering to copy
+ * is a row that asks somebody to trust it. `break-all` is what breaks a string with
+ * no break opportunity in it, which is exactly what these are.
  */
 export function CopyRow({
   label,
@@ -55,7 +62,7 @@ export function CopyRow({
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <p
           className={cn(
-            'mt-0.5 truncate text-sm',
+            'mt-0.5 break-all text-sm',
             mono && 'font-mono text-xs',
             value ? 'text-foreground' : 'text-muted-foreground',
           )}

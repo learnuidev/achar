@@ -51,6 +51,7 @@ import {
   type Item,
   type Key,
 } from './dynamo';
+import { coalesceSpans } from '@achar/schema';
 import { HttpError } from './http';
 import { rev as newRev, ulid } from './ids';
 import { forgetVersions, getVersion, snapshotVersion, type SnapshotInput } from './versions';
@@ -134,7 +135,17 @@ export function assertWritableFields(fields: Record<string, unknown>): void {
   }
 }
 
-/** A stored row as the API returns it, with the bookkeeping attributes removed. */
+/**
+ * A stored row as the API returns it, with the bookkeeping attributes removed.
+ *
+ * **A field that is portable text is answered in its canonical form** — adjacent
+ * spans with the same marks joined into one — which is the shape the schema
+ * describes and the one a person can read. It is done here rather than in the
+ * handler because this is the single place a document becomes an answer, so a query,
+ * a read by id and a webhook payload all agree; and it is done *on the way out*
+ * because documents written before the studio's editor stopped splitting runs are
+ * already in the table, and a reader should not have to care which.
+ */
 export function toApiDocument(
   row: DocumentRow,
   flags: { draft: boolean; published: boolean; editable: boolean },
@@ -142,7 +153,7 @@ export function toApiDocument(
   const document: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(row)) {
     if (INTERNAL_ATTRIBUTES.has(name)) continue;
-    document[name] = value;
+    document[name] = coalesceSpans(value);
   }
   return {
     ...document,

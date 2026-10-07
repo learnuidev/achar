@@ -18,13 +18,14 @@ import {
 /**
  * The site's navigation, in one place.
  *
- * The four destinations are the four things a visitor is deciding between —
- * what it is, what it costs, who uses it, and what we think — and they are listed
- * here rather than in the header because the mobile panel needs the same list in
- * the same order, and two lists drift.
+ * The destinations are the things a visitor is deciding between — what it is, how
+ * to build on it, what it costs, who uses it, and what we think — and they are
+ * listed here rather than in the header because the mobile panel needs the same
+ * list in the same order, and two lists drift.
  */
 export const NAV_LINKS = [
   { href: '/product', label: 'Product' },
+  { href: '/docs', label: 'Docs' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/customers', label: 'Customers' },
   { href: '/blog', label: 'Blog' },

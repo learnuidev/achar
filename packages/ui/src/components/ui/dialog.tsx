@@ -37,6 +37,13 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
  * and scroll inside the screen when it is taller than that. It is also the reason
  * the padding lives on the wrapper: a panel that is 100% of a padded box is a
  * panel that never touches the edge of a phone.
+ *
+ * **It scrolls vertically, and never sideways.** `overflow-y: auto` alone does not
+ * give that: an axis that is not `visible` forces the other one to compute to
+ * `auto` as well, so one child that could not shrink was enough to put a horizontal
+ * scrollbar across a dialog. `overflow-x-hidden` says which axis this is, and the
+ * things that legitimately need to scroll sideways — a table, a block of code —
+ * carry their own `overflow-x-auto` and scroll inside their own box.
  */
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -48,7 +55,7 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          'relative grid max-h-full w-full max-w-lg gap-4 overflow-y-auto rounded-2xl border border-border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'relative grid max-h-full w-full max-w-lg gap-4 overflow-y-auto overflow-x-hidden rounded-2xl border border-border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
         )}
         {...props}

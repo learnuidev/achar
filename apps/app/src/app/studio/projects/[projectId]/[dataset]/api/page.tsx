@@ -6,7 +6,7 @@ import { WebhooksCard } from '@/components/studio/webhooks-card';
 import { useStudio } from '@/components/studio/studio-context';
 import { PageHeader, StatBlock } from '@/components/ui/page-header';
 import { useTokens, useWebhooks } from '@/hooks/use-tokens';
-import { plural, relativeTime } from '@/lib/format';
+import { relativeTime } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
 
 /**
@@ -33,9 +33,10 @@ export default function DatasetApiPage({
   const tokens = useTokens(projectId);
   const webhooks = useWebhooks(projectId);
 
-  const tokenList = tokens.data ?? [];
-  const revokedTokens = tokenList.filter((token) => token.revokedAt).length;
-  const activeTokens = tokenList.length - revokedTokens;
+  // Counted the way the card lists them: what is in service. A revoked token is a
+  // record rather than a credential, and the strip above the card and the rows
+  // inside it are one answer rather than two that can disagree.
+  const activeTokens = (tokens.data ?? []).filter((token) => !token.revokedAt).length;
 
   const webhookList = webhooks.data ?? [];
   const enabledWebhooks = webhookList.filter((webhook) => webhook.enabled).length;
@@ -68,13 +69,7 @@ export default function DatasetApiPage({
         <StatBlock
           label="Tokens"
           value={canAdmin ? activeTokens : '—'}
-          hint={
-            canAdmin
-              ? revokedTokens > 0
-                ? `${plural(revokedTokens, 'token')} revoked`
-                : 'none revoked'
-              : 'only an admin sees these'
-          }
+          hint={canAdmin ? 'in service' : 'only an admin sees these'}
         />
         <StatBlock
           label="Webhooks"

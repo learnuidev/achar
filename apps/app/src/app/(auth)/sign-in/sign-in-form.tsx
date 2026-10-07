@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { SignIn, useViewer } from '@achar/auth';
 import { routes } from '@/lib/routes';
 
@@ -23,6 +24,21 @@ import { routes } from '@/lib/routes';
  */
 export function SignInForm() {
   const { viewer, loading } = useViewer();
+  const params = useSearchParams();
+
+  /**
+   * Where to go afterwards: `?next=`, when it is a path on this site.
+   *
+   * Somebody sent here from the API reference's playground is signing in to mint a
+   * token and try a request, and dropping them in the studio afterwards would lose
+   * the page they were reading. Only a same-site path is accepted — a redirect
+   * parameter that took an absolute URL would be a way to bounce somebody off the
+   * site with our own sign-in screen.
+   */
+  const requested = params.get('next');
+  const redirectTo = requested?.startsWith('/') && !requested.startsWith('//')
+    ? requested
+    : routes.projectPicker();
 
   if (!loading && viewer) {
     return (
@@ -40,7 +56,7 @@ export function SignInForm() {
   return (
     <SignIn
       title="Sign in to Achar"
-      redirectTo={routes.projectPicker()}
+      redirectTo={redirectTo}
       footer={
         <>
           No account yet?{' '}

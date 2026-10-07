@@ -239,9 +239,14 @@ export async function reserveAsset(input: ReserveAssetInput): Promise<ReservedAs
     filename: sanitizeFilename(input.filename),
     contentType: input.contentType,
     size: input.size ?? 0,
-    width: input.width ?? null,
-    height: input.height ?? null,
-    blurHash: null,
+    // Absent rather than `null`, and that is load-bearing rather than tidy: the
+    // commit below is conditional on `attribute_not_exists(committedAt)`, and a
+    // stored NULL is *present*, so an asset reserved with `committedAt: null`
+    // could never be committed — the condition failed, the route read the row back
+    // and answered as though it had committed, and the asset sat uncommitted with
+    // its dataset's count never moving.
+    ...(input.width === undefined || input.width === null ? {} : { width: input.width }),
+    ...(input.height === undefined || input.height === null ? {} : { height: input.height }),
     reference: referenceFor(input.kind, assetId, input.filename, {
       width: input.width,
       height: input.height,
@@ -249,7 +254,8 @@ export async function reserveAsset(input: ReserveAssetInput): Promise<ReservedAs
     s3Key,
     uploadedBy: input.uploadedBy,
     createdAt: now,
-    committedAt: null,
+    // `committedAt` is absent here for the reason above: committing is the
+    // transition into it, and "not yet committed" has to be nothing at all.
   };
 
   // A create, not an update: the id is fresh, and `putIfAbsent` is what would
@@ -315,8 +321,10 @@ export async function commitAsset(
     Keys.asset(projectId, assetKeyOf(dataset, assetId)),
     {
       set,
-      condition: 'attribute_exists(#key) AND attribute_not_exists(#committedAt)',
+      condition:
+        'attribute_exists(#key) AND (attribute_not_exists(#committedAt) OR attribute_type(#committedAt, :null))',
       names: { '#key': 'assetKey', '#committedAt': 'committedAt' },
+      values: { ':null': 'NULL' },
       returnValues: 'ALL_NEW',
     },
   );
