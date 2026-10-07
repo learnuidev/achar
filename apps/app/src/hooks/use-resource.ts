@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AcharClient } from '@achar/api';
 import { errorMessage } from '@/lib/errors';
-import { useAcharClient } from '@/components/studio/client-provider';
+import { useAcharClient } from '@/components/client-provider';
 
 /**
  * One read, and the four things a screen says about it.

@@ -16,7 +16,7 @@ import {
 } from '@achar/ui';
 import { useAssetLibrary } from '@/components/studio/asset-library';
 import { AssetUpload } from '@/components/studio/asset-upload';
-import { useAcharClient } from '@/components/studio/client-provider';
+import { useAcharClient } from '@/components/client-provider';
 import { useStudio } from '@/components/studio/studio-context';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyButton } from '@/components/ui/copy-row';

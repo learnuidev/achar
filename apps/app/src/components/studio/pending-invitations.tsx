@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import type { Invitation } from '@achar/types';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@achar/ui';
 import { RoleBadge } from '@/components/studio/badges';
-import { useAcharClient } from '@/components/studio/client-provider';
+import { useAcharClient } from '@/components/client-provider';
 import { formatDate } from '@/lib/format';
 import { routes } from '@/lib/routes';
 

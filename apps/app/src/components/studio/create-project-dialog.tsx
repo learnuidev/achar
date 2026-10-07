@@ -33,10 +33,22 @@ import { slugify } from '@achar/schema';
  * The caller becomes the project's admin — that is the API's rule, not this
  * form's — and the dialog closes onto the project's own page rather than onto
  * the list, because a person who just made one wants the dataset form.
+ *
+ * `defaultOpen` is for the screen that is told to arrive with this form already
+ * up — `/studio?view=new-project`, which is where onboarding hands over. It is
+ * read once, on the first render, and not held: a dialog that followed the query
+ * afterwards would reopen itself when somebody closed it.
  */
-export function CreateProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
+export function CreateProjectDialog({
+  trigger,
+  defaultOpen = false,
+}: {
+  trigger?: React.ReactNode;
+  /** Open on the first render — how a URL asks this form to be up. */
+  defaultOpen?: boolean;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [name, setName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
 

@@ -6,7 +6,12 @@ import { useViewer } from '@achar/auth';
 import { Skeleton } from '@achar/ui';
 
 /**
- * The one `AcharClient` the studio uses, handed down.
+ * The one `AcharClient` a signed-in surface uses, handed down.
+ *
+ * It lives at the top of `components/` rather than under `studio/` because it is
+ * not the studio's: the onboarding flow calls the same API with the same token,
+ * and a provider owned by one surface would be a second copy of this file for
+ * the other.
  *
  * One rather than one per request, for two reasons. The token is the first: a
  * client is built from a bearer token, `getToken()` is asynchronous, and a

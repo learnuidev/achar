@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FolderPlusIcon, LayersIcon } from 'lucide-react';
 import { Button, Card, CardContent, Skeleton } from '@achar/ui';
 import { AppPage } from '@/components/studio/app-header';
@@ -9,6 +11,7 @@ import { ProjectCard } from '@/components/studio/project-card';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { useInvitations, useProjects } from '@/hooks/use-projects';
+import { routes } from '@/lib/routes';
 
 /**
  * The front door: every project you can open, and the two ways to get another.
@@ -18,17 +21,30 @@ import { useInvitations, useProjects } from '@/hooks/use-projects';
  * that question is a page everybody clicks past once. Invitations come first
  * because they are addressed to somebody who is not in any of the projects
  * below, and an offer is easy to lose under a grid.
+ *
+ * `?view=new-project` arrives with the form up. The query is an instruction spent
+ * on arrival, so it is dropped from the URL as soon as it has been obeyed: left
+ * there, it would reopen the dialog on every reload and make Back a button that
+ * does nothing.
  */
 export default function ProjectPickerPage() {
   const projects = useProjects();
   const invitations = useInvitations();
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const newProject = params.get('view') === 'new-project';
+
+  useEffect(() => {
+    if (newProject) router.replace(routes.projectPicker());
+  }, [newProject, router]);
 
   return (
     <AppPage>
       <PageHeader
         title="Your projects"
         description="A project owns datasets and people. Pick one to author against, or make the first one."
-        actions={<CreateProjectDialog />}
+        actions={<CreateProjectDialog defaultOpen={newProject} />}
       />
 
       {invitations.data && invitations.data.length > 0 && (

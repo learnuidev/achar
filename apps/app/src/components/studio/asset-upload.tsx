@@ -7,7 +7,7 @@ import { uploadAsset } from '@achar/api';
 import type { Asset } from '@achar/types';
 import { Button, cn } from '@achar/ui';
 import { useAssetLibrary } from '@/components/studio/asset-library';
-import { useAcharClient } from '@/components/studio/client-provider';
+import { useAcharClient } from '@/components/client-provider';
 import { useStudio } from '@/components/studio/studio-context';
 import { ReadOnlyNote } from '@/components/ui/empty-state';
 import { errorMessage } from '@/lib/errors';

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import type { SchemaType } from '@achar/types';
 import { Skeleton } from '@achar/ui';
 import { initialDocument, validateDocument } from '@achar/schema';
-import { useAcharClient } from '@/components/studio/client-provider';
+import { useAcharClient } from '@/components/client-provider';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { DocumentForm } from '@/components/editor/document-form';

@@ -206,8 +206,22 @@ export interface UpdateSpec {
   set?: Record<string, unknown>;
   setIfMissing?: Record<string, unknown>;
   remove?: string[];
-  /** Atomic increments. A missing attribute counts as zero, which is why a
-   *  counter never needs to be initialized before it is first moved. */
+  /**
+   * Atomic counter moves, written as DynamoDB's own `ADD`.
+   *
+   * `ADD` rather than `SET x = x + :v`, which is the form that looks equivalent
+   * and is not: `SET` fails outright when the attribute is absent, while `ADD`
+   * treats a missing attribute as zero. That is what lets a counter be moved by a
+   * route that never initialized it — a project row written before `datasetCount`
+   * existed still counts correctly the first time a dataset is made.
+   *
+   * A negative amount subtracts, so a caller passes `-1` to move a count down
+   * rather than this having to know which direction it is going.
+   *
+   * A caller must not name the same attribute here and in `set`: DynamoDB refuses
+   * an update whose clauses overlap, and that refusal arrives as a validation
+   * error rather than as a conflict between the two intentions.
+   */
   inc?: Record<string, number>;
   condition?: string;
   names?: Record<string, string>;
@@ -234,6 +248,7 @@ export async function updateItem<T = Item>(
   const values: Record<string, unknown> = { ...spec.values };
   const clauses: string[] = [];
   const removals: string[] = [];
+  const additions: string[] = [];
   let nameCount = 0;
   let valueCount = 0;
 
@@ -270,15 +285,19 @@ export async function updateItem<T = Item>(
     clauses.push(`${path(attribute)} = if_not_exists(${path(attribute)}, ${alias})`);
   }
 
+  // `ADD`, not a `SET` clause — see `UpdateSpec.inc`. The amount carries its own
+  // sign, so `-1` is written as `ADD #p :v` with `:v` of -1 and DynamoDB does the
+  // subtraction. Writing it as a `-` operator in the expression instead would
+  // negate a negative amount twice and move the counter the wrong way.
   for (const [attribute, amount] of Object.entries(spec.inc ?? {})) {
-    clauses.push(`${path(attribute)} ${amount < 0 ? '-' : '+'} ${value(amount)}`);
+    additions.push(`${path(attribute)} ${value(amount)}`);
   }
 
   for (const attribute of spec.remove ?? []) {
     removals.push(path(attribute));
   }
 
-  const updateExpression = buildUpdateExpression(clauses, removals);
+  const updateExpression = buildUpdateExpression(clauses, removals, additions);
   if (!updateExpression) {
     throw new HttpError(400, 'BAD_REQUEST', 'Nothing to update');
   }
@@ -298,10 +317,24 @@ export async function updateItem<T = Item>(
   return result.Attributes as T | undefined;
 }
 
-function buildUpdateExpression(clauses: string[], removals: string[]): string {
+/**
+ * The clauses, in the order DynamoDB's grammar requires them: `SET`, `REMOVE`,
+ * `ADD`.
+ *
+ * The order is not a preference. `ADD` before `REMOVE` is a syntax error on every
+ * update that does both, and a builder that emitted them in the order it happened
+ * to hold them would be wrong for exactly the callers that move a counter and drop
+ * a field in the same write.
+ */
+function buildUpdateExpression(
+  clauses: string[],
+  removals: string[],
+  additions: string[],
+): string {
   const parts: string[] = [];
   if (clauses.length > 0) parts.push(`SET ${clauses.join(', ')}`);
   if (removals.length > 0) parts.push(`REMOVE ${removals.join(', ')}`);
+  if (additions.length > 0) parts.push(`ADD ${additions.join(', ')}`);
   return parts.join(' ');
 }
 

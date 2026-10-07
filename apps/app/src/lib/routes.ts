@@ -15,8 +15,28 @@
 /** Where the studio starts. The site owns `/`, and this is the whole of what is not the site. */
 export const base = '/studio';
 
+/**
+ * The onboarding flow, which is the one path in this file that is not the studio's.
+ *
+ * It is here anyway, and for the reason the rest of the file exists: two other
+ * modules need this URL — the studio's gate, which sends a person with nothing to
+ * open to it, and the flow itself, which is where signing in comes back to — and a
+ * path spelled twice is a redirect that goes nowhere the day it is renamed.
+ */
+export const getStartedPath = '/get-started';
+
 export const routes = {
   projectPicker: () => base,
+  /**
+   * The picker with the new-project dialog already open.
+   *
+   * The query is how one screen asks another for a dialog it owns: `/studio` is
+   * where projects are made, and this is the same screen told to arrive with the
+   * form up. A person coming back from onboarding has just been asked for a
+   * project's name and organization, so landing on a list with a button they have
+   * to press again would be asking the same question twice.
+   */
+  projectPickerNewProject: () => `${base}?view=new-project`,
   project: (projectId: string) => `${base}/projects/${projectId}`,
   members: (projectId: string) => `${base}/projects/${projectId}/members`,
   dataset: (projectId: string, dataset: string) => `${base}/projects/${projectId}/${dataset}`,
