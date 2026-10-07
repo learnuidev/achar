@@ -160,6 +160,12 @@ const DOCUMENT_FIELDS: ApiField[] = [
     description:
       'The localized fields this document has no value for in `_language`, by path. They are answered from the default language, and this is how a page knows to mark one or a build step knows to translate it. Absent when there is nothing missing.',
   },
+  {
+    name: '_translations',
+    type: 'Record<string, TranslationRecord>',
+    description:
+      'Where each language’s values came from and who approved them — `{ "fr": { "source": "ai", "model": "…", "at": "…", "approvedBy": null } }`. `source` is `ai` when a model wrote those values and `human` when anything else did, and an approval applies to a particular text: editing a language clears it. Absent on a document no model has translated.',
+  },
 ];
 
 /**
@@ -372,7 +378,7 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
             type: 'Mutation[]',
             required: true,
             description:
-              'Each element names exactly one operation: `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`. They are applied **in order**, so a `create` and a `publish` of the same id in one batch is a document that is live by the time the response is written.',
+              'Each element names exactly one operation: `create`, `createOrReplace`, `createIfNotExists`, `patch`, `delete`, `publish`, `unpublish`, `restore`, `approve`. They are applied **in order**, so a `create` and a `publish` of the same id in one batch is a document that is live by the time the response is written.',
             example: '[{"create":{"_id":"hello","_type":"post","title":"Hello world","body":"First line\\n\\nSecond paragraph"}},{"publish":{"id":"hello"}}]',
           },
           {
@@ -396,8 +402,47 @@ export const API_ENDPOINT_GROUPS: ApiEndpointGroup[] = [
           'A string is read as blocks on a **create**, not on a `patch`. A patch edits fields of a document that already exists, so it sends the nodes it read back — a client that has the document has them.',
           '**A localized field holds one value per language, and a write says which language a plain value is in** with `_language` — `{"patch": {"id": "hello", "set": {"title": "Bonjour"}, "_language": "fr"}}`. Omit it and the value is written in the dataset’s default language. A value that is already an object is taken as the map itself, which is how one element writes two languages; a patch’s `unset` paths are taken as written, so `title` removes the field and `title.fr` removes one language.',
           'A **draft may be missing a required field** — that is what a draft is for. Publishing is where a document has to be whole, and it is refused with the fields it is missing.',
+          '**A publish is refused while a language a model translated has not been approved** — 409 `UNAPPROVED_TRANSLATION`, naming the languages. `approve` is what clears it, and it is a person’s: a request carrying an API token is refused.',
           'Every publish is recorded: `GET …/versions` is the history of what a document has said, and `restore` puts one of those back as the draft.',
           'A token needs the `EDITOR` role or better to write. See **Tokens** for what a role reaches.',
+        ],
+      },
+      {
+        id: 'translate',
+        method: 'POST',
+        path: '/v1/data/translate/{projectId}/{dataset}',
+        summary: 'Translate a document with a model',
+        description:
+          '**AWS Bedrock translates the document’s fields into one of the dataset’s languages, into the draft.** Not the published row: nothing a reader sees changes until somebody publishes, and the document comes back marked as a model’s work so that no surface has to guess. Rich text keeps its structure — each run of text is translated where it sits, and marks, links and images stay where they were — and a field with nothing in it is never sent, which is why nothing here costs money for an untranslated document.',
+        auth: 'token',
+        parameters: [PROJECT_ID, DATASET],
+        body: [
+          { name: 'id', type: 'string', required: true, description: 'The document to translate.', example: 'hello-world' },
+          { name: 'language', type: 'string', required: true, description: 'The language to translate **into** — one of the dataset’s `languages`.', example: 'fr' },
+          { name: 'from', type: 'string', description: 'The language to translate **from**. Absent means the dataset’s default language.', example: 'en' },
+          {
+            name: 'fields',
+            type: 'string[]',
+            description:
+              'Only these field paths, and anything under them — `["title","excerpt"]`. **The escape hatch for a document too large for one model call**, since a request that outlives the gateway has no answer at all.',
+            example: '["title"]',
+          },
+        ],
+        responseStatus: '200 OK',
+        responseExample: `{
+  "documentId": "hello-world",
+  "language": "fr",
+  "from": "en",
+  "model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+  "fields": ["title", "excerpt", "body"],
+  "skipped": ["coverImage"],
+  "document": { "_id": "hello-world", "_type": "post", "title": { "en": "Hello world", "fr": "Bonjour le monde" }, "_translations": { "fr": { "source": "ai", "model": "anthropic.…", "at": "2026-03-02T10:00:00.000Z" } } }
+}`,
+        notes: [
+          '**A model may do the work and may not ship it.** The language it wrote is recorded as `source: "ai"` with the model’s id and no approval, and **publishing is refused until a person approves it** — `{"approve":{"id":"hello-world","languages":["fr"]}}` in a mutation batch, which needs a person’s token rather than an API token.',
+          '**Editing a language’s values clears that language’s approval**, because what was approved was a particular text. The studio re-approves after an edit, and so must any other client that edits a translation it did not write.',
+          '`skipped` names the paths there was nothing to translate in: an empty field, an asset, a number, or a path `fields` asked for that the schema does not declare. An empty `fields` with a full `skipped` is a document that was already translated.',
+          'A deployment with no `TRANSLATION_MODEL` answers **501**, naming the variable. A model this account has not been granted, or a refusal, answers **502** with the provider’s own sentence.',
         ],
       },
       {

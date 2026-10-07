@@ -59,7 +59,8 @@ Three splits carry the whole design, and all three are visible from the outside:
   translation is a field on the document rather than a document beside it, and one
   French title still being written does not hold up publishing the English one. A
   read asks for `?language=fr`, falls back per field to the dataset's default
-  language, and names the fields it had to fall back on.
+  language, and names the fields it had to fall back on. A model can draft the
+  translations; a person has to approve them, and a publish is refused until they do.
 
 ## Quick start
 

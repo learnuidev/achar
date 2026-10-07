@@ -13,6 +13,7 @@ import { DocumentPreview } from '@/components/editor/document-preview';
 import { InspectorPanel } from '@/components/editor/inspector-panel';
 import { LanguageSwitch } from '@/components/editor/language-switch';
 import { PublishBar, type SaveState } from '@/components/editor/publish-bar';
+import { TranslationNote } from '@/components/editor/translation-note';
 import { DocumentHistoryDialog } from '@/components/studio/document-history-dialog';
 import { useStudio } from '@/components/studio/studio-context';
 import { useDocumentPair } from '@/hooks/use-documents';
@@ -138,6 +139,23 @@ export function DocumentEditor({
     }
     return counts;
   }, [languages, type, value, defaultLanguage]);
+
+  /**
+   * The languages a model wrote that nobody has approved, by code.
+   *
+   * Read off the row the editor holds rather than remembered as actions happen, and
+   * for the reason the lane below reads it there too: editing a language's values
+   * clears that language's approval at the API, so an approved language can go back
+   * to unapproved without anybody pressing anything. Publish is refused while any of
+   * these stands, which is why the switch marks them where the languages are chosen.
+   */
+  const unapproved = useMemo(() => {
+    const codes: Record<string, boolean> = {};
+    for (const [code, entry] of Object.entries(shown?._translations ?? {})) {
+      if (entry.source === 'ai' && !entry.approvedBy) codes[code] = true;
+    }
+    return codes;
+  }, [shown]);
 
   // The form is filled from the read, but never while somebody is typing: a
   // refetch that landed mid-sentence and reset the fields to the last saved
@@ -338,6 +356,7 @@ export function DocumentEditor({
               defaultLanguage={defaultLanguage}
               value={language}
               missing={missing}
+              unapproved={unapproved}
               onChange={setChosen}
             />
           }
@@ -374,6 +393,25 @@ export function DocumentEditor({
               changes it.
             </p>
           )}
+
+          <TranslationNote
+            projectId={projectId}
+            dataset={dataset}
+            documentId={documentId}
+            document={shown ?? published}
+            language={language}
+            defaultLanguage={defaultLanguage}
+            canEdit={canEdit}
+            dirty={dirty}
+            onChanged={() => {
+              // A translation and an approval both write the draft, so the row is read
+              // again rather than patched here. Unlike a restore, `dirty` is not
+              // cleared first: the lane's buttons are off while the form is dirty, so
+              // there is nothing of the person's own for this refill to overwrite —
+              // which is exactly what lets the effect above take the new document.
+              pair.refresh();
+            }}
+          />
 
           {pair.loading && !pair.data && !isNew ? (
             <div className="space-y-4">

@@ -94,7 +94,12 @@ function LocalizedControl({
     missing && language !== defaultLanguage && fallback !== undefined && fallback !== null;
 
   return (
-    <div className="grid gap-1">
+    // The bar down the left side is how a translated field is told from a shared one at
+    // a glance — and it is the only visual difference between the two, because there is
+    // no other: the box, the label and the control are the same, and the only thing that
+    // makes one of them per-language is a decision on the schema screen. See the note
+    // `DocumentForm` draws above the fields for a language that is not the default.
+    <div className="grid gap-1 border-l-2 border-primary/30 pl-3">
       <FieldControlBody
         {...rest}
         field={{ ...field, localized: false }}

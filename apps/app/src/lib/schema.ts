@@ -67,6 +67,37 @@ export function hasGroups(type: SchemaType): boolean {
 }
 
 /**
+ * How many of a type's fields hold one value per language.
+ *
+ * **The number the editor's language lane needs and cannot see for itself.** A
+ * field is translated only when the schema says so — `Localized<string>`, or
+ * `localized: true` — and everything else holds a single value that every language
+ * shows. That is easy to forget and impossible to notice from the form alone: the
+ * only difference between a translated field and a shared one is a decision made on
+ * the schema screen, so a form drawn from one looks exactly like a form drawn from
+ * the other, and a person editing "the French title" of a shared field is changing
+ * the title everywhere.
+ *
+ * Nested fields count too: an object's own fields may be translated, and a list of
+ * objects is a list of them.
+ */
+export function localizedFieldCount(type: SchemaType): number {
+  return countLocalized(type.fields);
+}
+
+function countLocalized(fields: SchemaField[]): number {
+  let count = 0;
+
+  for (const field of fields) {
+    if (field.localized) count += 1;
+    if (field.fields?.length) count += countLocalized(field.fields);
+    if (field.of?.length) count += countLocalized(field.of);
+  }
+
+  return count;
+}
+
+/**
  * The document types a dataset lists.
  *
  * An `object` type is only ever a field of a document, so it is not a list

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { SchemaType } from '@achar/types';
 import type { SchemaIssue } from '@achar/schema';
 import { Separator, Tabs, TabsContent, TabsList, TabsTrigger } from '@achar/ui';
-import { fieldGroups, hasGroups, hasIssueAt, issuesAt, visibleFields } from '@/lib/schema';
+import { fieldGroups, hasGroups, hasIssueAt, issuesAt, localizedFieldCount, visibleFields } from '@/lib/schema';
+import { languageName } from '@/lib/language';
 import { FieldControl } from '@/components/editor/field-controls';
 
 /**
@@ -108,6 +109,8 @@ export function DocumentForm({
 
   return (
     <div ref={container} className="space-y-6">
+      {language !== defaultLanguage && <LanguageLane type={type} language={language} />}
+
       {tabbed ? (
         <Tabs defaultValue={groups[0]?.name}>
           <TabsList>
@@ -154,6 +157,50 @@ export function DocumentForm({
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * What the language on screen means for the fields below it.
+ *
+ * **The one thing a form cannot show by itself.** A field holds a value per language
+ * only when the schema says so — `Localized<string>`, or `localized: true` — and every
+ * other field holds a single value that all languages share: same box, same label,
+ * same everything, because the only difference between the two is a decision made on
+ * the schema screen. So a person who switches to French and finds the fields still
+ * full of English cannot tell "nothing here is translated yet" from "nothing here
+ * *can* be translated" — and in the second case, typing into what they take for a
+ * French title changes the title in every language.
+ *
+ * Drawn only for a language other than the default: the default language is the one a
+ * document is written in first, and a note about it would be noise on the one screen
+ * where nothing is surprising.
+ */
+function LanguageLane({ type, language }: { type: SchemaType; language: string }) {
+  const translated = useMemo(() => localizedFieldCount(type), [type]);
+
+  if (translated === 0) {
+    return (
+      <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">
+          Nothing in {type.title || type.name} holds a value per language.
+        </span>{' '}
+        Switching language changes nothing here: every field below is the same in all of them,
+        including whatever is typed while this one is on screen. A field becomes translatable
+        when the schema writes it as <span className="font-mono">Localized&lt;…&gt;</span>, which
+        is done on the schema screen.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      Editing <span className="font-medium text-foreground">{languageName(language)}</span>.{' '}
+      {translated === 1 ? 'One field' : `${translated} fields`} of {type.title || type.name}{' '}
+      {translated === 1 ? 'holds' : 'hold'} a value per language — each has a bar down its left
+      side, and one this language has not been written in is an empty box. Every other field is
+      shared by all of them.
     </div>
   );
 }

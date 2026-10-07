@@ -22,6 +22,7 @@ export function LanguageSwitch({
   defaultLanguage,
   value,
   missing,
+  unapproved,
   onChange,
 }: {
   languages: readonly string[];
@@ -30,6 +31,14 @@ export function LanguageSwitch({
   value: string;
   /** Fields with no value in each language, by code — what the switch reports. */
   missing: Record<string, number>;
+  /**
+   * Languages a model wrote that nobody has approved, by code.
+   *
+   * Marked here because publishing is refused while any of them stands, and this is
+   * where a language is chosen: without it, the language that is holding a publish
+   * back is the one nobody has a reason to open.
+   */
+  unapproved?: Record<string, boolean>;
   onChange: (language: string) => void;
 }) {
   // One language is not a choice, and a select that cannot change anything is
@@ -55,6 +64,9 @@ export function LanguageSwitch({
               {languageName(code)}
               {code === defaultLanguage ? (
                 <span className="text-muted-foreground"> · default</span>
+              ) : null}
+              {unapproved?.[code] ? (
+                <span className="text-warning"> · needs approval</span>
               ) : null}
               {gaps > 0 ? (
                 <span className="text-muted-foreground">
