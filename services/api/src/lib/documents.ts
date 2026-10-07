@@ -60,6 +60,7 @@ import {
   coalesceSpans,
   fieldByPath,
   isLanguageMap,
+  isLocalizable,
   localizeFields,
   referenceIdOf,
   resolveLanguages,
@@ -1499,7 +1500,9 @@ function applyPatch(
    * a translation costing the prose it was translated from.
    */
   const migrate = (path: string): void => {
-    if (!type || fieldByPath(type, path)?.localized !== true) return;
+    if (!type) return;
+    const field = fieldByPath(type, path);
+    if (!field || !isLocalizable(field)) return;
     const current = readPath(next, path);
     if (current === undefined || isLanguageMap(current)) return;
     writePath(next, path, { [defaultLanguage]: current });
@@ -1507,7 +1510,9 @@ function applyPatch(
 
   /** Where a plain value belongs: at the language, for a field that holds several. */
   const target = (path: string, value: unknown): string => {
-    if (!type || fieldByPath(type, path)?.localized !== true) return path;
+    if (!type) return path;
+    const field = fieldByPath(type, path);
+    if (!field || !isLocalizable(field)) return path;
     if (value !== undefined && isLanguageMap(value)) return path;
     migrate(path);
     return `${path}.${language}`;

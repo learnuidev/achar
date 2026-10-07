@@ -31,6 +31,7 @@
 
 import type { SchemaField, SchemaType } from '@achar/types';
 
+import { isLocalizable } from './languages';
 import { blocksFromText } from './portable-text';
 
 export function coerceDocument(
@@ -56,16 +57,20 @@ function coerce(field: SchemaField, value: unknown, path: string): unknown {
   // value rather than to the map. The language is part of the path for a reason
   // `blocksFromText` cares about: it names the `_key` of every block it makes, and
   // two languages sharing a path would produce two blocks with one key.
-  if (field.localized) {
+  if (isLocalizable(field)) {
     if (!isRecord(value)) return value;
     const next = { ...value };
-    const inner: SchemaField = { ...field, localized: false };
     for (const [language, entry] of Object.entries(value)) {
-      next[language] = coerce(inner, entry, `${path}.${language}`);
+      next[language] = coerceValue(field, entry, `${path}.${language}`);
     }
     return next;
   }
 
+  return coerceValue(field, value, path);
+}
+
+/** One value, converted for the field it was sent for — never wrapped in a language. */
+function coerceValue(field: SchemaField, value: unknown, path: string): unknown {
   switch (field.type) {
     case 'portableText':
       return typeof value === 'string' ? blocksFromText(value, path) : value;

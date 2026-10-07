@@ -8,7 +8,7 @@
  */
 
 import type { SchemaField, SchemaType } from '@achar/types';
-import type { SchemaIssue } from '@achar/schema';
+import { isLocalizable, type SchemaIssue } from '@achar/schema';
 /** A field's title, or one made from its name when the schema gave none. */
 export function fieldTitle(field: SchemaField): string {
   return field.title || field.name;
@@ -89,7 +89,7 @@ function countLocalized(fields: SchemaField[]): number {
   let count = 0;
 
   for (const field of fields) {
-    if (field.localized) count += 1;
+    if (isLocalizable(field)) count += 1;
     if (field.fields?.length) count += countLocalized(field.fields);
     if (field.of?.length) count += countLocalized(field.of);
   }
@@ -161,13 +161,13 @@ export function isReadableField(field: SchemaField): boolean {
  */
 export function initialForField(field: SchemaField, defaultLanguage?: string): unknown {
   if (field.initialValue !== undefined) {
-    return field.localized && defaultLanguage
+    return isLocalizable(field) && defaultLanguage
       ? { [defaultLanguage]: field.initialValue }
       : field.initialValue;
   }
 
   const empty = emptyForField(field, defaultLanguage);
-  if (!field.localized) return empty;
+  if (!isLocalizable(field)) return empty;
   return defaultLanguage ? { [defaultLanguage]: empty } : {};
 }
 

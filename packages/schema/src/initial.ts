@@ -1,5 +1,7 @@
 import type { SchemaField, SchemaType } from '@achar/types';
 
+import { isLocalizable } from './languages';
+
 /**
  * A new document of a type, with every field present.
  *
@@ -35,11 +37,11 @@ function initialValue(field: SchemaField, defaultLanguage: string | undefined): 
     // An `initialValue` on a localized field is the value in the default language,
     // for the same reason a plain value sent over the API is: nobody writes a
     // translation into a schema as the thing every new document starts with.
-    return field.localized && defaultLanguage ? { [defaultLanguage]: field.initialValue } : field.initialValue;
+    return isLocalizable(field) && defaultLanguage ? { [defaultLanguage]: field.initialValue } : field.initialValue;
   }
 
   const empty = emptyValue(field, defaultLanguage);
-  if (!field.localized) return empty;
+  if (!isLocalizable(field)) return empty;
   return defaultLanguage ? { [defaultLanguage]: empty } : {};
 }
 

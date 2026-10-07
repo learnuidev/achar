@@ -1,5 +1,7 @@
 import type { SchemaField, SchemaType } from '@achar/types';
 
+import { isLocalizable } from './languages';
+
 /** One thing wrong with one value, at the path a form can point at. */
 export interface SchemaIssue {
   path: string;
@@ -73,15 +75,26 @@ function checkField(
   issues: SchemaIssue[],
   options: ValidateOptions,
 ): void {
-  const complete = options.requireComplete ?? true;
-
   // Before the dispatch rather than inside it, because every branch below reads the
   // value as the leaf it declares: `must be a string` is the right sentence about a
   // string and the wrong one about a map of languages. See `checkLocalized`.
-  if (field.localized) {
+  if (isLocalizable(field)) {
     checkLocalized(field, value, path, issues, options);
     return;
   }
+
+  checkLeaf(field, value, path, issues, options);
+}
+
+/** One value read as the leaf it declares, with no language map around it. */
+function checkLeaf(
+  field: SchemaField,
+  value: unknown,
+  path: string,
+  issues: SchemaIssue[],
+  options: ValidateOptions,
+): void {
+  const complete = options.requireComplete ?? true;
 
   if (value === undefined || value === null) {
     if (field.required && complete) issues.push({ path, message: 'is required' });
@@ -188,7 +201,7 @@ function checkLocalized(
 
   const map = value as Record<string, unknown>;
   for (const [language, entry] of Object.entries(map)) {
-    checkField(inner, entry, `${path}.${language}`, issues, options);
+    checkLeaf(inner, entry, `${path}.${language}`, issues, options);
   }
 
   if (!field.required || !complete) return;

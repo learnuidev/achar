@@ -48,6 +48,31 @@ export function isLanguageMap(value: unknown): value is Record<string, unknown> 
   return !VALUE_KEYS.some((key) => key in value);
 }
 
+/**
+ * Whether a field holds one value per language.
+ *
+ * The rule the write and the read share: an asset (`image`, `video`, `file`) is
+ * a reference and is never translated, and an `object` or `array` is a container
+ * whose own fields decide one at a time. Every other field — a string, a number,
+ * a date, a slug, a reference, rich text — holds one value per language, so it is
+ * stored as `{ en: "…", fr: "…" }` rather than as one plain value that editing
+ * French would overwrite for English too.
+ *
+ * A field the schema marks `localized` is translated whatever its type, because a
+ * list of phrases is a real thing; the flag only widens the rule, it never narrows
+ * it below the type default.
+ */
+export function isLocalizable(field: SchemaField): boolean {
+  if (field.localized === true) return true;
+  return (
+    field.type !== 'image' &&
+    field.type !== 'video' &&
+    field.type !== 'file' &&
+    field.type !== 'object' &&
+    field.type !== 'array'
+  );
+}
+
 /** One language's value, and whether it had to come from somewhere else. */
 export interface LanguageValue {
   value: unknown;
@@ -139,12 +164,24 @@ export function localizeFields(
 }
 
 function localizeOne(field: SchemaField, value: unknown, language: string): unknown {
-  if (field.localized) {
+  if (isLocalizable(field)) {
     // An object is the map itself, keys and all — see this file's opening note on
     // why that is decidable. Anything else is one value, and `language` is whose.
     return isLanguageMap(value) ? value : { [language]: value };
   }
 
+  return localizeContainer(field, value, language);
+}
+
+/** An array item: an element is not a field, so only one the schema itself marks localized is a map. */
+function localizeItem(field: SchemaField, value: unknown, language: string): unknown {
+  if (field.localized === true) {
+    return isLanguageMap(value) ? value : { [language]: value };
+  }
+  return localizeContainer(field, value, language);
+}
+
+function localizeContainer(field: SchemaField, value: unknown, language: string): unknown {
   switch (field.type) {
     case 'object': {
       if (!isRecord(value)) return value;
@@ -161,7 +198,7 @@ function localizeOne(field: SchemaField, value: unknown, language: string): unkn
       // Every member of `of` is applied to the same item, as in `coerce`: at most
       // the members matching the item do anything.
       return value.map((item) =>
-        (field.of ?? []).reduce<unknown>((carried, member) => localizeOne(member, carried, language), item),
+        (field.of ?? []).reduce<unknown>((carried, member) => localizeItem(member, carried, language), item),
       );
     }
 
@@ -219,7 +256,7 @@ function resolveFields(
 
     const path = prefix ? `${prefix}.${field.name}` : field.name;
 
-    if (field.localized) {
+    if (isLocalizable(field)) {
       const answer = languageValue(value[field.name], language, defaultLanguage);
       if (answer.untranslated) untranslated.push(path);
       next[field.name] = answer.value;
@@ -244,12 +281,40 @@ function resolveOne(
   // A localized field is answered the same way wherever it sits — an item of a list
   // is a field like any other, and a list of translated phrases is a shape somebody
   // modeling content can reasonably want.
-  if (field.localized) {
+  if (isLocalizable(field)) {
     const answer = languageValue(value, language, defaultLanguage);
     if (answer.untranslated) untranslated.push(path);
     return answer.value;
   }
 
+  return resolveContainer(field, value, language, defaultLanguage, path, untranslated);
+}
+
+/** An array item: only one the schema itself marks localized is answered per language. */
+function resolveItem(
+  field: SchemaField,
+  value: unknown,
+  language: string,
+  defaultLanguage: string,
+  path: string,
+  untranslated: string[],
+): unknown {
+  if (field.localized === true) {
+    const answer = languageValue(value, language, defaultLanguage);
+    if (answer.untranslated) untranslated.push(path);
+    return answer.value;
+  }
+  return resolveContainer(field, value, language, defaultLanguage, path, untranslated);
+}
+
+function resolveContainer(
+  field: SchemaField,
+  value: unknown,
+  language: string,
+  defaultLanguage: string,
+  path: string,
+  untranslated: string[],
+): unknown {
   switch (field.type) {
     case 'object':
       return isRecord(value)
@@ -264,7 +329,7 @@ function resolveOne(
       return value.map((item, index) =>
         (field.of ?? []).reduce<unknown>(
           (carried, member) =>
-            resolveOne(member, carried, language, defaultLanguage, `${path}[${index}]`, untranslated),
+            resolveItem(member, carried, language, defaultLanguage, `${path}[${index}]`, untranslated),
           item,
         ),
       );
@@ -383,7 +448,7 @@ function compareInto(
     const after = next[field.name];
     const was = before?.[field.name];
 
-    if (field.localized) {
+    if (isLocalizable(field)) {
       compareLanguages(path, after, was, changed);
       continue;
     }
@@ -458,7 +523,7 @@ function compareFields(
     const was = before?.[field.name];
     const now = after?.[field.name];
 
-    if (field.localized) {
+    if (isLocalizable(field)) {
       for (const language of languagesIn(was, now)) {
         if (!sameValue(mapValue(was, language), mapValue(now, language))) found.add(language);
       }

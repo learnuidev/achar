@@ -5,7 +5,7 @@ import { SparklesIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { PortableText, SchemaField } from '@achar/types';
 import type { SchemaIssue } from '@achar/schema';
-import { isLanguageMap, languageValue, setLanguageValue, slugify } from '@achar/schema';
+import { isLanguageMap, isLocalizable, languageValue, setLanguageValue, slugify } from '@achar/schema';
 import { hasIssueAt } from '@/lib/schema';
 import { languageName } from '@/lib/language';
 import { routes } from '@/lib/routes';
@@ -57,10 +57,19 @@ export interface FieldControlProps {
   language: string;
   /** The dataset's default language: whose value a reader is shown for a gap. */
   defaultLanguage: string;
+  /**
+   * True when this control draws one item of a list rather than a named field.
+   *
+   * An array item is an element, not a field, so it holds one value per language
+   * only when the schema marks that item localized — a list of phrases — rather
+   * than by the type rule a named field follows.
+   */
+  asItem?: boolean;
 }
 
 export function FieldControl(props: FieldControlProps) {
-  if (props.field.localized) return <LocalizedControl {...props} />;
+  const localizable = props.asItem ? props.field.localized === true : isLocalizable(props.field);
+  if (localizable) return <LocalizedControl {...props} />;
   // A shared field is only a trap while somebody is editing a language that is not the
   // one its one value is written in. In the default language it is simply a field.
   if (
