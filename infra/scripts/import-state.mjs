@@ -128,18 +128,19 @@ function main() {
     mail: {
       fromAddress: arg('from-address', 'no-reply@achar.example'),
       appBaseUrl: arg('app-url', 'http://localhost:3000'),
-      studioBaseUrl: arg('studio-url', 'http://localhost:3001'),
+      // The studio is a surface of the app, so its base URL is the app's plus a
+      // path — not a port of its own.
+      studioBaseUrl: arg('studio-url', 'http://localhost:3000/studio'),
       consoleBaseUrl: arg('console-url', 'http://localhost:3002'),
     },
     auth: {
       googleClientId: arg('google-client-id', ''),
       callbackUrls: [
         'http://localhost:3000',
-        'http://localhost:3000/auth/callback',
-        'http://localhost:3001',
-        'http://localhost:3001/auth/callback',
+        'http://localhost:3000/studio',
+        'http://localhost:3000/studio/auth/callback',
       ],
-      logoutUrls: ['http://localhost:3000', 'http://localhost:3001'],
+      logoutUrls: ['http://localhost:3000', 'http://localhost:3000/studio'],
     },
     // False for all three: see this script's own note.
     ownership: { tables: false, media: false, auth: false },

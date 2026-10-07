@@ -705,11 +705,11 @@ This app imports **no `@achar/*` package**, and `next.config.mjs` has no
 `transpilePackages`. It draws with its own primitives in `src/components/ui/`, and
 its own shapes in `src/lib/types.ts`.
 
-The reason is the one thing about this app that is not a preference. Web and
-studio draw with `@achar/ui` because they are the same product seen from two
-sides; this is the room the operator stands in. **A tool that shares a component —
-or a type, or a client — with the thing it deploys is a tool that cannot be used to
-diagnose that thing.** If `apps/web` renders a broken document because
+The reason is the one thing about this app that is not a preference. The app —
+the site and the studio together — draws with `@achar/ui` because it is the
+product; this is the room the operator stands in. **A tool that shares a component
+— or a type, or a client — with the thing it deploys is a tool that cannot be used
+to diagnose that thing.** If `apps/app` renders a broken document because
 `@achar/schema` changed, the console has to be able to say so with code that did
 not change with it. The same argument runs through every read: the console calls
 `aws` rather than taking the SDK the handlers use, and it plans a deploy rather

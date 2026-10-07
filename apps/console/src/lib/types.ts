@@ -188,7 +188,7 @@ export interface RunSummary {
  * The four frontends
  * ------------------------------------------------------------------ */
 
-export type AppKey = "web" | "studio" | "console" | "demo";
+export type AppKey = "app" | "console" | "demo";
 export type ServiceStatus = "stopped" | "starting" | "running" | "failed";
 
 export interface ServiceView {

@@ -38,10 +38,10 @@ import { googleSecretStatus, readSettings, settingsContext } from "./settings";
  * rows name functions rather than apps.
  */
 export const CONSUMERS: Record<string, string[]> = {
-  ApiUrl: ["web", "studio", "console", "demo"],
-  UserPoolId: ["web", "studio", "console", "demo"],
-  UserPoolClientId: ["web", "studio", "console", "demo"],
-  UserPoolDomain: ["web", "studio", "console", "demo"],
+  ApiUrl: ["app", "console", "demo"],
+  UserPoolId: ["app", "console", "demo"],
+  UserPoolClientId: ["app", "console", "demo"],
+  UserPoolDomain: ["app", "console", "demo"],
   // A person, not an app: sign-in is disabled until the client id and secret are
   // right, and the Checklist tab is where they are supplied. Nothing in this
   // repository reads the flag.
@@ -188,14 +188,14 @@ export async function backendEnv(
       value: settings?.auth.callbackUrls.join(", ") || null,
       source: "Settings — origins Cognito will return a sign-in to",
       editable: true,
-      usedBy: ["web", "studio", "console", "demo"],
+      usedBy: ["app", "console", "demo"],
     },
     {
       key: "Logout URLs",
       value: settings?.auth.logoutUrls.join(", ") || null,
       source: "Settings — origins Cognito will return a sign-out to",
       editable: true,
-      usedBy: ["web", "studio", "console", "demo"],
+      usedBy: ["app", "console", "demo"],
     },
     {
       key: "Mail from address",
@@ -209,14 +209,14 @@ export async function backendEnv(
       value: settings?.mail.appBaseUrl || null,
       source: "Settings — APP_BASE_URL, the public site in a mailed link",
       editable: true,
-      usedBy: ["invitations", "web"],
+      usedBy: ["invitations", "app"],
     },
     {
       key: "Studio base URL",
       value: settings?.mail.studioBaseUrl || null,
-      source: "Settings — STUDIO_BASE_URL, where an author is sent",
+      source: "Settings — STUDIO_BASE_URL, where an author is sent — the same app, at /studio",
       editable: true,
-      usedBy: ["invitations", "studio"],
+      usedBy: ["invitations", "app"],
     },
     {
       key: "Console base URL",

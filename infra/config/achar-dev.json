@@ -10,22 +10,21 @@
   "mail": {
     "fromAddress": "no-reply@achar.example",
     "appBaseUrl": "http://localhost:3000",
-    "studioBaseUrl": "http://localhost:3001",
+    "studioBaseUrl": "http://localhost:3000/studio",
     "consoleBaseUrl": "http://localhost:3002"
   },
   "auth": {
     "googleClientId": "",
     "callbackUrls": [
       "http://localhost:3000",
-      "http://localhost:3000/auth/callback",
-      "http://localhost:3001",
-      "http://localhost:3001/auth/callback",
+      "http://localhost:3000/studio",
+      "http://localhost:3000/studio/auth/callback",
       "http://localhost:3002",
       "http://localhost:3002/auth/callback"
     ],
     "logoutUrls": [
       "http://localhost:3000",
-      "http://localhost:3001",
+      "http://localhost:3000/studio",
       "http://localhost:3002"
     ]
   },

@@ -7,7 +7,7 @@ import { bodyFor } from './portable-text';
  * The ten posts the blog is rendered from.
  *
  * Written as real copy rather than placeholder text, because this seed is both
- * what `apps/web` falls back to when no API is configured and what the seed
+ * what `apps/app` falls back to when no API is configured and what the seed
  * script pushes into a real dataset: a page of lorem ipsum hides every layout
  * problem that only appears with a long headline, a list or a code block.
  *

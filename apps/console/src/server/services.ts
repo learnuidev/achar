@@ -37,7 +37,7 @@ import {
  * environment it is started in — and the environment wins. `@next/env` fills in
  * only the keys `process.env` does not already have, which is the documented
  * behaviour and the property this whole feature rests on: the console can start
- * the studio against `staging` without touching `apps/studio/.env.local`, and
+ * the app against `staging` without touching `apps/app/.env.local`, and
  * the file the developer has been editing keeps saying what it said.
  *
  * The values come from the same place the deploy plan's ninth step reads them

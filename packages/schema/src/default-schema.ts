@@ -7,7 +7,7 @@ import { hashRevision } from './hash';
  * Achar's own content model — the schema this repository's site is rendered from.
  *
  * It is a real schema rather than a fixture, and it is deliberately the one shape
- * that has to survive all three of its readings: `apps/web` renders documents
+ * that has to survive all three of its readings: `apps/app` renders documents
  * authored against it, the studio edits them, and `apps/demo` queries them with
  * GROQ. A field added here is a field every one of those has to have an answer
  * for, which is the argument for the model being as small as it is.

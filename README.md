@@ -61,16 +61,21 @@ Two splits carry the whole design, and both are visible from the outside:
 npm install
 ```
 
-The four apps, each on its own port:
+The three apps, each on its own port:
 
 ```bash
-npm run dev:web        # http://localhost:3000  the public site
-npm run dev:studio     # http://localhost:3001  the content studio
+npm run dev:app        # http://localhost:3000  the site, and /studio for the studio
 npm run console        # http://localhost:3002  the control room
 npm run dev:demo       # http://localhost:3003  a third-party client
 ```
 
-**The public site runs with no backend at all.** `apps/web` renders Achar's own
+The site and the studio are one app with two surfaces: `/` is the marketing front
+door, `/studio` is where the content it renders is authored. They share a build, a
+set of environment variables and an origin, and they share no chrome — the site's
+header and footer stop at the studio, and the studio's sign-in gate stops at the
+site.
+
+**The public site runs with no backend at all.** `apps/app` renders Achar's own
 content from `seedDocuments()` in `@achar/schema` when no API is configured, and
 switches to live content the moment `NEXT_PUBLIC_ACHAR_API_URL` points at one. That
 is deliberate: a marketing site that cannot be looked at without a deployed

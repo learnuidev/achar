@@ -61,7 +61,7 @@ export function repoPath(...parts: string[]): string {
   return path.join(/* turbopackIgnore: true */ repoRoot(), ...parts);
 }
 
-/** The four apps the console starts, in the order they are shown. */
+/** The three apps the console starts, in the order they are shown. */
 export interface AppDefinition {
   key: AppKey;
   name: string;
@@ -72,10 +72,10 @@ export interface AppDefinition {
 }
 
 /**
- * The four apps, and the port each one binds.
+ * The three apps, and the port each one binds.
  *
- * The ports are not a preference: `apps/web` serves 3000, `apps/studio` 3001 and
- * `apps/demo` 3003, because every one of their `dev` scripts and the callback
+ * The ports are not a preference: `apps/app` serves 3000 and `apps/demo` 3003,
+ * because every one of their `dev` scripts and the callback
  * URLs in `infra/config/achar-<stage>.json` already name those numbers. This
  * list repeats them because a console that started an app on a port nobody's
  * Cognito client accepts would produce a sign-in that fails with
@@ -83,18 +83,12 @@ export interface AppDefinition {
  */
 export const APPS: AppDefinition[] = [
   {
-    key: "web",
-    name: "Web",
-    blurb: "The public site — the marketing front door and the content it renders, on port 3000.",
+    key: "app",
+    name: "App",
+    blurb:
+      "The site and the studio in one — the marketing front door at `/` and the content studio at `/studio`, on port 3000.",
     port: 3000,
-    workspace: "achar-web",
-  },
-  {
-    key: "studio",
-    name: "Studio",
-    blurb: "The content studio — schemas, documents, assets and publishing, on port 3001.",
-    port: 3001,
-    workspace: "achar-studio",
+    workspace: "achar-app",
   },
   {
     key: "console",
@@ -135,7 +129,7 @@ export function appDir(key: AppKey): string {
  * The `next` binary, resolved rather than shelled out to.
  *
  * `npx next` would be a second Node process spent deciding what to run, and
- * `npm run dev --workspace achar-web` cannot take a port without editing the
+ * `npm run dev --workspace achar-app` cannot take a port without editing the
  * script. Next is hoisted to the root `node_modules` by the workspace install,
  * which is exactly where this looks.
  */

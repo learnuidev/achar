@@ -9,8 +9,8 @@ sharing packages, deployed by one CDK app, driven by one console.**
 
 ```
 apps/
-  web/        the public site — the marketing front door and the content it renders
-  studio/     the content studio — schemas, documents, assets, publishing
+  app/        the site and the studio — `/` is the marketing front door and the
+              content it renders, `/studio` is where that content is authored
   console/    the control room — deploys the backend, starts the frontends, reads AWS
   demo/       a third-party client of the content API, and nothing else
 services/
@@ -28,10 +28,19 @@ packages/
 
 | App | Port | What it is |
 | --- | --- | --- |
-| `apps/web` | 3000 | The public site |
-| `apps/studio` | 3001 | The studio |
+| `apps/app` | 3000 | `/` — the public site; `/studio` — the content studio |
 | `apps/console` | 3002 | The console |
 | `apps/demo` | 3003 | The third-party client |
+
+The site and the studio are **one app**, and that is a decision about what they
+share rather than a convenience: they draw with the same design system, read the
+same content API and are deployed to the same origin, and two Next apps meant two
+builds, two sets of environment variables, two ports and a CORS entry each for a
+difference that is one path segment wide. What is *not* shared is everything that
+belongs to a surface — the site's header and footer never wrap the schema editor,
+the studio's sign-in gate never wraps the pricing page — so the chrome lives in a
+route group (`app/(site)/`) and a segment (`app/studio/`) rather than in a root
+layout. The studio is at `/studio` and nothing else is.
 
 ## Dependencies — all at latest
 
@@ -82,7 +91,7 @@ defineType({ name: 'post', title: 'Post', kind: 'document', fields: [ defineFiel
   written.
 - `defaultSchema(): DatasetSchema` — **the content model the public site is
   rendered from.** Every type listed below. The seed writes it, the studio edits
-  it, `apps/web` reads it, and `apps/demo` queries it.
+  it, `apps/app` renders it, and `apps/demo` queries it.
 - `validateDocument(type: SchemaType, value: unknown): SchemaIssue[]` where
   `SchemaIssue = { path: string; message: string }`.
 - `initialDocument(type: SchemaType): Record<string, unknown>` — a new document
@@ -334,7 +343,7 @@ the same five surfaces:
 | --- | --- |
 | `/backends` | Every environment, what state it is in, and one button each |
 | `/backends/{stage}` | Tabs: Checklist, Env, Deployments, Logs, Tables |
-| `/frontends` | The four apps, whether each is running, and where |
+| `/frontends` | The three apps, whether each is running, and where |
 | `/frontends/{app}` | Env variables for one app against one stage, and its logs |
 | `/integrations/aws` | Who the CLI is, which account, and what is in it |
 
@@ -351,7 +360,7 @@ src/server/
   plan.ts          THE BACKEND PLANS: the steps a deploy walks, and a delete walks
   run.ts           the run engine — steps, transcript, cancel, result
   run-api.ts       one step's transcript after the fact, and the live stream
-  services.ts      the four dev servers, and cleaning up after them
+  services.ts      the three dev servers, and cleaning up after them
   tables.ts        the environment's DynamoDB tables, and a page of one's rows
   metrics.ts       CloudWatch's numbers for one function, with quiet slots filled
 ```

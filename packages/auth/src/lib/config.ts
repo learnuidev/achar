@@ -17,7 +17,14 @@ export interface AcharAuthConfig {
   redirectSignOut: string;
 }
 
-/** The path an app registers with Cognito as a callback URL. */
+/**
+ * The path an app registers with Cognito as a callback URL.
+ *
+ * Defaulted rather than fixed, because where the callback lives is a property of
+ * the app that hosts it: Achar's own app serves the studio under `/studio`, so its
+ * callback is `/studio/auth/callback`, while a leaf client of the API can put it
+ * wherever it likes. A constant would make one of those two wrong.
+ */
 export const oauthCallbackPath = '/auth/callback';
 
 /**
@@ -36,7 +43,7 @@ export const oauthCallbackPath = '/auth/callback';
  * Next inlines — a loop over a list of names builds a bundle where every one of
  * them is `undefined`, which fails at runtime in a way nothing points at.
  */
-export function authConfigFromEnv(): AcharAuthConfig | null {
+export function authConfigFromEnv(options: { callbackPath?: string } = {}): AcharAuthConfig | null {
   const region = process.env.NEXT_PUBLIC_ACHAR_REGION;
   const userPoolId = process.env.NEXT_PUBLIC_ACHAR_USER_POOL_ID;
   const userPoolWebClientId = process.env.NEXT_PUBLIC_ACHAR_USER_POOL_CLIENT_ID;
@@ -51,7 +58,7 @@ export function authConfigFromEnv(): AcharAuthConfig | null {
     userPoolWebClientId,
     domain: process.env.NEXT_PUBLIC_ACHAR_AUTH_DOMAIN ?? '',
     apiUrl: process.env.NEXT_PUBLIC_ACHAR_API_URL ?? '',
-    redirectSignIn: `${origin}${oauthCallbackPath}`,
+    redirectSignIn: `${origin}${options.callbackPath ?? oauthCallbackPath}`,
     redirectSignOut: origin,
   };
 }

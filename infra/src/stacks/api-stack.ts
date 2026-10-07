@@ -254,8 +254,11 @@ function appOrigins(config: AcharConfig): string[] {
     config.mail.appBaseUrl,
     config.mail.studioBaseUrl,
     config.mail.consoleBaseUrl,
+    // The four local ports that exist: the app, the console, the demo — and no
+    // 3001, because the studio is served from the app at `/studio` rather than
+    // from a process of its own. An origin in an allow-list that nothing can be
+    // served from is the kind of entry that looks like it is doing something.
     'http://localhost:3000',
-    'http://localhost:3001',
     'http://localhost:3002',
     'http://localhost:3003',
   ]);

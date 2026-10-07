@@ -359,8 +359,9 @@ function annotations(stderr: string): string[] {
 function appOrigins(config: StageConfig | null): Array<{ app: AppDefinition; url: string }> {
   const mail = config?.mail;
   const named: Record<string, string | undefined> = {
-    web: mail?.appBaseUrl,
-    studio: mail?.studioBaseUrl,
+    // One app, two URLs: the site is the origin, and the studio is a path
+    // inside it, so both of the mail settings point at the same process.
+    app: mail?.appBaseUrl,
     console: mail?.consoleBaseUrl,
   };
 
@@ -370,7 +371,7 @@ function appOrigins(config: StageConfig | null): Array<{ app: AppDefinition; url
   }));
 }
 
-const SIGNING_IN_APPS = ["web", "studio", "console"] as const;
+const SIGNING_IN_APPS = ["app", "console"] as const;
 
 /* ------------------------------------------------------------------ *
  * The steps both plans share

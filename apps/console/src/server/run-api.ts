@@ -75,7 +75,7 @@ export async function appFromBody(
   const name = (await bodyOf(request))?.app;
   if (typeof name !== "string" || !appDefinition(name)) {
     return NextResponse.json(
-      { error: "Expected a JSON body of the shape { app: 'web' | 'studio' | 'console' | 'demo' }." },
+      { error: "Expected a JSON body of the shape { app: 'app' | 'console' | 'demo' }." },
       { status: 400 },
     );
   }

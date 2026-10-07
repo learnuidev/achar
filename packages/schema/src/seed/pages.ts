@@ -9,7 +9,7 @@ import { bodyFor } from './portable-text';
  * Every one of these is a `page` document rather than a component, and that is the
  * point the rest of the site is arguing: `/about` and `/privacy` are authored in
  * the same studio as everything else, rendered through the same rich-text
- * renderer as a blog post, and adding one is saving a document. `apps/web`'s
+ * renderer as a blog post, and adding one is saving a document. `apps/app`'s
  * `[slug]` route is the catch-all that reads them — which is why the footer can
  * link to `/sub-processors` without anybody writing a `sub-processors.tsx`.
  *

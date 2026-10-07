@@ -243,7 +243,7 @@ export function SettingsForm({
               id="mail-studio"
               value={studioBaseUrl}
               onChange={(event) => setStudioBaseUrl(event.target.value)}
-              placeholder="http://localhost:3001"
+              placeholder="http://localhost:3000/studio"
               spellCheck={false}
             />
           </Field>

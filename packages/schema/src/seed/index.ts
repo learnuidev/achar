@@ -15,7 +15,7 @@ import { seedSiteSettings } from './site-settings';
  * Achar's own site content, as documents.
  *
  * Plain JSON-serialisable data typed as `AcharDocument`, and it is used from two
- * places that cannot share a runtime: `apps/web` renders it as a fallback when no
+ * places that cannot share a runtime: `apps/app` renders it as a fallback when no
  * API is configured — so the site is never a blank page — and
  * `services/api/scripts/seed.mjs` pushes the same array into a dataset over the
  * HTTP API. One array, two ways of reading it, which is why nothing here is a

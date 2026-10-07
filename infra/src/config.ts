@@ -157,8 +157,8 @@ export function configPath(stage: string): string {
   return path.join(CONFIG_DIR, `achar-${stage}.json`);
 }
 
-/** The ports the four apps run on, which is what a default has to agree with. */
-const APP_PORTS = { app: 3000, studio: 3001, console: 3002 } as const;
+/** The ports the apps run on, which is what a default has to agree with. */
+const APP_PORTS = { app: 3000, console: 3002 } as const;
 
 /**
  * Where mail comes from and where the apps live, when the config says nothing.
@@ -180,7 +180,8 @@ export function defaultMail(stage: string): MailSettings {
   return {
     fromAddress: 'no-reply@achar.example',
     appBaseUrl: `http://localhost:${APP_PORTS.app}`,
-    studioBaseUrl: `http://localhost:${APP_PORTS.studio}`,
+    // The studio is the app at a path, not a process of its own.
+    studioBaseUrl: `http://localhost:${APP_PORTS.app}/studio`,
     consoleBaseUrl: `http://localhost:${APP_PORTS.console}`,
   };
 }
@@ -194,23 +195,29 @@ export function defaultMail(stage: string): MailSettings {
  * ordering for a new environment, since registering an OAuth client requires
  * knowing the pool's callback URL and the pool does not exist yet.
  *
- * The callback URLs default to the three apps on their own ports, `/auth/callback`
+ * The callback URLs default to the apps that sign anyone in, `/auth/callback`
  * included. Cognito refuses a client with **no** callback URL, so an empty list is
  * a deploy failure whose message names a property rather than a cause — which is
  * why `validate` insists on a non-empty list even though every other field here
  * has a usable default.
+ *
+ * Both of Achar's own are listed by the path each app really serves: the studio
+ * is a surface of the app under `/studio`, so its callback is
+ * `/studio/auth/callback` and a root-level one would be a URL nothing answers.
  */
 export function defaultAuth(stage: string): AuthSettings {
   const origins = [
-    `http://localhost:${APP_PORTS.app}`,
-    `http://localhost:${APP_PORTS.studio}`,
-    `http://localhost:${APP_PORTS.console}`,
+    { origin: `http://localhost:${APP_PORTS.app}`, callbacks: ['/studio/auth/callback'] },
+    { origin: `http://localhost:${APP_PORTS.console}`, callbacks: ['/auth/callback'] },
   ];
 
   return {
     googleClientId: '',
-    callbackUrls: origins.flatMap((origin) => [origin, `${origin}/auth/callback`]),
-    logoutUrls: origins,
+    callbackUrls: origins.flatMap(({ origin, callbacks }) => [
+      origin,
+      ...callbacks.map((path) => `${origin}${path}`),
+    ]),
+    logoutUrls: origins.map(({ origin }) => origin),
   };
 }
 
