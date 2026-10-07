@@ -94,6 +94,14 @@ export function SiteFooter() {
 
         <div className="flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} Achar. Built on structured content.</p>
+          <p className="flex gap-4">
+            <Link href="/sign-in" className="transition-colors hover:text-foreground">
+              Sign in
+            </Link>
+            <Link href="/sign-up" className="transition-colors hover:text-foreground">
+              Create an account
+            </Link>
+          </p>
           <p>
             This site is rendered from the same dataset it sells — the pages you are reading are
             documents in an Achar project.

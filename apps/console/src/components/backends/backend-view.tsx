@@ -239,7 +239,7 @@ function EnvTab({
       <Card>
         <CardHeading
           title="Outputs"
-          hint="What the deploy publishes. The first four are the values the four frontends are handed — a frontend's own variables are just these rows with a different name."
+          hint="What the deploy publishes. The first four are the values the three frontends are handed — a frontend's own variables are just these rows with a different name."
         />
         <div className="mt-5">
           {env ? (

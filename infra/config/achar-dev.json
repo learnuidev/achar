@@ -14,17 +14,15 @@
     "consoleBaseUrl": "http://localhost:3002"
   },
   "auth": {
-    "googleClientId": "",
+    "googleClientId": "198779702019-ibt99vu68dke8bmsrgcmblg9fkr7k27m.apps.googleusercontent.com",
     "callbackUrls": [
       "http://localhost:3000",
-      "http://localhost:3000/studio",
-      "http://localhost:3000/studio/auth/callback",
+      "http://localhost:3000/auth/callback",
       "http://localhost:3002",
       "http://localhost:3002/auth/callback"
     ],
     "logoutUrls": [
       "http://localhost:3000",
-      "http://localhost:3000/studio",
       "http://localhost:3002"
     ]
   },

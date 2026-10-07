@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: Params) {
   const app = appDefinition(slug);
   if (!app) {
     return NextResponse.json(
-      { error: `'${slug}' is not one of the four apps in this workspace.` },
+      { error: `'${slug}' is not one of the three apps in this workspace.` },
       { status: 404 },
     );
   }

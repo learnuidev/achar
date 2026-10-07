@@ -185,7 +185,7 @@ export interface RunSummary {
 }
 
 /* ------------------------------------------------------------------ *
- * The four frontends
+ * The three frontends
  * ------------------------------------------------------------------ */
 
 export type AppKey = "app" | "console" | "demo";
@@ -679,7 +679,7 @@ export type DeployEvent =
 /**
  * The dev servers' own stream.
  *
- * The four apps are one server each and one thing to watch each, so one stream
+ * The three apps are one server each and one thing to watch each, so one stream
  * carries all of them — and a build, when one is going, is a run rather than a
  * service: it has steps and a transcript, and it is drawn with the same
  * checklist a deploy is.

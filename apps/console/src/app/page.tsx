@@ -247,7 +247,7 @@ export default function RootPage() {
         >
           Backends
         </Link>
-        . The four apps are on{" "}
+        . The three apps are on{" "}
         <Link
           href="/frontends"
           className="text-foreground/80 hover:text-foreground font-medium underline underline-offset-4"

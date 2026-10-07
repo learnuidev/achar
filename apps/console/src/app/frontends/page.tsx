@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { FrontendsView } from "@/components/frontends/frontends-view";
 
 /**
- * The four apps, as a list.
+ * The three apps, as a list.
  *
  * This page is the whole of "where is it running", because there is nowhere else
  * these apps run: a dev server on this machine, started from here, on the port its

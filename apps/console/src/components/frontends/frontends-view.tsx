@@ -25,7 +25,7 @@ import { FRONTENDS, STATUS, isLive, type FrontendChoice } from "@/lib/frontends"
 import type { ServiceView } from "@/lib/types";
 
 /**
- * The four frontends, and what each one is doing.
+ * The three frontends, and what each one is doing.
  *
  * ## Why the list is not drawn from the stream
  *
@@ -72,7 +72,7 @@ export function FrontendsView() {
       <header className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">Frontends</h1>
         <p className="text-muted-foreground text-sm">
-          The four apps, each as a dev server the console starts on its own port, against one
+          The three apps, each as a dev server the console starts on its own port, against one
           environment.
         </p>
       </header>

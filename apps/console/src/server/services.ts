@@ -29,7 +29,7 @@ import {
 } from "./repo";
 
 /**
- * The four frontends, started from here — and built from here.
+ * The three frontends, started from here — and built from here.
  *
  * ## What "with a specific environment" means
  *
@@ -331,7 +331,7 @@ export interface StartServiceOptions {
  * demonstrably working. Stopping it is refused for the same reason plus one:
  * the Stop would kill the process that has to answer with whether it stopped.
  *
- * Refused rather than quietly left out of the list, because the four apps are a
+ * Refused rather than quietly left out of the list, because the three apps are a
  * list of what is in this workspace and a list that omitted the one you are
  * looking at is a list you have to discover the shape of.
  */

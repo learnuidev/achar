@@ -70,7 +70,7 @@ export interface AcharApiStackProps extends StackProps {
  * made.
  */
 export class AcharApiStack extends Stack {
-  /** The API's own endpoint. What the four apps put in `NEXT_PUBLIC_ACHAR_API_URL`. */
+  /** The API's own endpoint. What the three apps put in `NEXT_PUBLIC_ACHAR_API_URL`. */
   readonly apiEndpoint: string;
 
   constructor(scope: Construct, id: string, props: AcharApiStackProps) {
@@ -244,7 +244,7 @@ function isAuthorized(route: HttpRouteSpec): boolean {
  *
  * Read from the config's own app URLs rather than hard-coded, because a stage
  * whose site lives somewhere else has a stage-specific CORS problem, and the local
- * ports are included unconditionally: every one of the four apps runs on
+ * ports are included unconditionally: every one of the three apps runs on
  * `localhost` before it runs anywhere else, and an API that cannot be called by the
  * studio on the machine the studio is being written on is an API nobody can
  * develop against.

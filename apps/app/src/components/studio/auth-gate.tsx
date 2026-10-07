@@ -81,9 +81,13 @@ export function SignInFrame({
         </Card>
 
         <p className="text-xs text-muted-foreground">
-          Not configured for this environment?{' '}
+          No account yet?{' '}
+          <Link href="/sign-up" className="underline">
+            Create one
+          </Link>{' '}
+          — or{' '}
           <Link href="/" className="underline">
-            Back to the studio
+            back to the site
           </Link>
         </p>
       </div>

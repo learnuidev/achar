@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppKey, LogLine, RunView, ServiceEvent, ServiceView } from "@/lib/types";
 
 /**
- * The four frontends, as the page sees them — and the build of one of them.
+ * The three frontends, as the page sees them — and the build of one of them.
  *
  * One `EventSource` for all four, because they share a page and a stream per
  * card would be four reconnects to get wrong. Lines are buffered and flushed on

@@ -40,7 +40,7 @@ export interface ExistingResources {
   googleSignInEnabled: boolean;
 }
 
-/** Who mail would come from, and where the four apps live. */
+/** Who mail would come from, and where the three apps live. */
 export interface MailSettings {
   fromAddress: string;
   appBaseUrl: string;

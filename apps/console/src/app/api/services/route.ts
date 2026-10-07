@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { listServices, occupiedPorts } from "@/server/services";
 
 /**
- * The four frontends, as the cards draw them.
+ * The three frontends, as the cards draw them.
  *
  * `occupied` is the one piece of extra information: a port something else is
  * already listening on is the failure a start would otherwise report as four

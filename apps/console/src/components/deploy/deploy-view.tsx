@@ -454,7 +454,7 @@ function ResultCard({ run }: { run: NonNullable<DeployState["run"]> }) {
       </div>
 
       {/* Six of the outputs, which is the whole of what this stage published:
-          the API the four apps and the demo call, the pool they sign in against,
+          the API the three apps and the demo call, the pool they sign in against,
           the bucket handlers presign uploads into, and the queue publishing
           lands in. Each one is here because somebody pastes it into a CLI. */}
       <div className="mt-5 flex flex-col gap-2 border-t border-border/40 pt-4">

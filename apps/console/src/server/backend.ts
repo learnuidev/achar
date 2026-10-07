@@ -13,12 +13,12 @@ import { googleSecretStatus, readSettings, settingsContext } from "./settings";
  *
  * - **Inputs** are what a *person* supplies, because nothing can discover them:
  *   the Google OAuth client and its secret, the origins Cognito will accept, the
- *   address invitations come from, and where the four apps live. They are
+ *   address invitations come from, and where the three apps live. They are
  *   written by the Settings form and read by a deploy.
  * - **Outputs** are what the *deploy* produces — the API URL, the assets bucket
  *   and its distribution, the pool, its app client, the Hosted UI domain, the
  *   delivery queue, every table's name — and they are consumed by something else
- *   entirely: the four frontends, or the handlers themselves. They are the
+ *   entirely: the three frontends, or the handlers themselves. They are the
  *   answer to "which environment is this app pointed at", and the reason a
  *   frontend's own view is just these rows with a different `usedBy`.
  *

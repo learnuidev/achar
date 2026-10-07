@@ -12,7 +12,7 @@ import { servicesBacklog, subscribeServices } from "@/server/services";
  *
  * ## Why `?app=` is a parameter
  *
- * The services half of this stream does not need one — it is the four apps and
+ * The services half of this stream does not need one — it is the three apps and
  * all of them are on it. The **build** half does: a build is a run through the
  * shared engine, keyed by its app, and a stream that attached to whichever build
  * started last would draw one app's checklist under another app's name. So a
@@ -37,7 +37,7 @@ const KIND = "frontend" as const;
  *
  * The two shapes differ in exactly one place. A `DeployEvent`'s line says which
  * **step** wrote it; a `ServiceEvent`'s says which **app** it belongs to, because
- * this stream is about four apps rather than about one run. Nothing is lost that
+ * this stream is about three apps rather than about one run. Nothing is lost that
  * a page cannot find again: the step a line belongs to is on the run the same
  * stream carries, and the line itself lands in the app's own output next to the
  * dev server's — which is where a build's lines belong, since a build is

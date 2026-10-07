@@ -6,7 +6,7 @@ otherwise live in a shell history nobody can read:
 - **Backends** — every environment the API has been deployed to, what each one
   was deployed with, what a new one needs before it can be deployed at all, and
   how a new one starts;
-- **Frontends** — the four apps, what each one is handed, and where they run;
+- **Frontends** — the three apps, what each one is handed, and where they run;
 - **Integrations** — the AWS account the console acts as, and what this
   repository has put in it.
 
@@ -461,7 +461,7 @@ check-first discipline.
 | 6 | The templates synthesize | never — this one validates |
 | 7 | The five stacks deploy | never — `cdk deploy` is run, and reports "nothing to change" as a *satisfied* step |
 | 8 | Every stack is complete, with its outputs | every root stack is settled and carries `ApiUrl`, `UserPoolId`, `UserPoolClientId` and `AssetsBucketName` — the list is `ROOT_STACKS` in `src/server/aws.ts`, so a stack added to the CDK app and not to it is a stack the console would report an environment complete without |
-| 9 | The four apps point at it | every `.env.local` already reads this stage's `ApiUrl` |
+| 9 | The three apps point at it | every `.env.local` already reads this stage's `ApiUrl` |
 | 10 | The API answers | `GET <ApiUrl>/v1/info` returns 200 |
 | 11 | The pool's app client accepts the app URLs | the config's `auth.callbackUrls` include each app's origin — **and** the running client does |
 
@@ -578,7 +578,7 @@ second place where a reload loses a running job is a second place to fix.
 
 ### The console does not start itself
 
-`apps/console` is one of the four apps and it is listed with the others, because a
+`apps/console` is one of the three apps and it is listed with the others, because a
 list of "the apps in this workspace" that quietly left out the one you are looking
 at would be a list somebody has to discover the shape of. Its **Start is
 refused**, with a sentence: port 3002 is the process answering the request, and
@@ -643,7 +643,7 @@ than a click. The steps are:
 | 7 | The user pool is gone, with every account in it | ticked | Its own step because it is the one deletion that is about people: a redeploy of the same name makes a **new**, empty pool and everybody signs up again |
 | 8 | The log groups are gone | ticked | One per function, thirty-nine of them, and the first thing that stops a redeploy of the same name |
 | 9 | This environment's credentials are gone | ticked | The Google client secret. The leftover the Checklist would otherwise have to create again, and the reason a stage that comes back comes back from the Checklist rather than from what the last one left behind |
-| 10 | What is still pointed here | ticked | **Reports instead of applying**: what the delete could not take with it, and the four apps' `.env.local` files compared against the `ApiUrl` captured before the stack publishing it went away |
+| 10 | What is still pointed here | ticked | **Reports instead of applying**: what the delete could not take with it, and the three apps' `.env.local` files compared against the `ApiUrl` captured before the stack publishing it went away |
 | 10 | What is left behind, and what a redeploy of this name will hit | unticked | **Reports instead of applying** too, and reads the account rather than predicting it: how many tables, buckets and log groups are still there by name, the pool with how many accounts are in it, the distribution — and what each of them does to a redeploy of the same name |
 | 11 | The environment's config file is removed | both | The last thing, and only once the stacks — and, when it was asked for, the data — are gone |
 
@@ -730,7 +730,7 @@ would never fire), no component library, no chart library and no AWS SDK.
 
 ```
 src/server/
-  repo.ts          the repository root, the four apps, the profile, the binaries
+  repo.ts          the repository root, the three apps, the profile, the binaries
   exec.ts          running a process and turning its output into lines
   aws.ts           the AWS CLI as a function or two — every call is a read
   environments.ts  infra/config/achar-<stage>.json, and the stack outputs an app needs
@@ -747,7 +747,7 @@ src/server/
   run.ts           the run engine — steps, transcript, cancel, result — for a
                    deploy, a delete and a build
   run-api.ts       one step's transcript after the fact, and the live stream
-  services.ts      the four dev servers, the build a frontend can be asked for,
+  services.ts      the three dev servers, the build a frontend can be asked for,
                    and cleaning up after them
   frontends.ts     what one app is handed, for one stage
 
@@ -764,7 +764,7 @@ src/app/api/
                    its "deploying" from
   deploy/events    its transcript, as it happens            (SSE)
   deploy/transcript  one step's lines, after the fact       (GET)
-  services         the four frontends                    (GET)
+  services         the three frontends                    (GET)
   services/[app]   start a dev server, or build one        (POST / DELETE)
   services/events  all four on one stream, the builds       (SSE)
                    included
@@ -812,7 +812,7 @@ src/components/
 src/lib/
   types.ts         every shape the server sends and a page draws
   backends.ts      a stage's words: its states, its blurbs, its five tabs
-  frontends.ts     the same for the four apps
+  frontends.ts     the same for the three apps
   format.ts        durations, times, sizes — every string a page formats
   dynamo.ts        DynamoDB's wire format, rendered for a person
   logs.ts          a Lambda log line, taken apart

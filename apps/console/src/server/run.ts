@@ -46,7 +46,7 @@ import { buildBuildPlan } from "./services";
  * What that leaves is the handful of things two environments genuinely share.
  * Those are named locks rather than a global one, because a staging bootstrap
  * should not hold up a dev bundle: `plan.ts` marks the steps that touch the
- * checkout (`infra/dist`, the four apps' `.env.local`) or the AWS account (the
+ * checkout (`infra/dist`, the three apps' `.env.local`) or the AWS account (the
  * toolkit stack) and this file is what makes them wait for each other.
  *
  * ## Why it lives on `globalThis`

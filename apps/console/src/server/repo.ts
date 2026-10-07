@@ -8,7 +8,7 @@ import type { AppKey, ProfileSource } from "@/lib/types";
  *
  * The console is *driven from* `apps/console` but its whole subject is the
  * repository above it: `infra/` for the stacks, `services/api` for the handlers,
- * and the four apps it starts. Every path here is derived from one root, so the
+ * and the three apps it starts. Every path here is derived from one root, so the
  * console does not care where Next put its working directory — `next dev` runs
  * with `cwd` set to this app, but a `next start` from somewhere else, or a test,
  * would not.

@@ -32,6 +32,14 @@ packages/
 | `apps/console` | 3002 | The console |
 | `apps/demo` | 3003 | The third-party client |
 
+**Signing in is two pages of that app** — `/sign-in` and `/sign-up` — in a route
+group of their own, so that neither surface's chrome is around them: the site's
+header and footer would be marketing in the way of the task, and the studio's gate
+is what these pages let somebody out of. They render the auth package's `SignIn`
+and `SignUp`; the studio's gate draws the same sign-in form over whatever somebody
+tried to open, which is why signing in exists as a form and as two URLs rather
+than as three screens.
+
 The site and the studio are **one app**, and that is a decision about what they
 share rather than a convenience: they draw with the same design system, read the
 same content API and are deployed to the same origin, and two Next apps meant two

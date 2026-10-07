@@ -985,7 +985,7 @@ export function buildPlan(stage: string): PlanStep[] {
    */
   const point: PlanStep = {
     id: "point",
-    title: "The four apps point at it",
+    title: "The three apps point at it",
     detail:
       "The API URL, the region, the pool, its app client and the Hosted UI domain are read out of this stage's stacks and written into each app's `.env.local` — and **only those five keys**: anything else in the file was put there by somebody else. A file names one environment, so a deploy here points the apps at *this* stage and away from whichever stage they read before.",
     satisfiedLabel: "Pointed at it",
@@ -2026,7 +2026,7 @@ function stillPointingStep(stage: string): PlanStep {
     id: "left",
     title: "What is still pointed here",
     detail:
-      "**Reports instead of applying.** The four apps' `.env.local` files are compared against the API URL captured before the stack that published it went away, and anything the run could not delete is listed with the reason. Pointing the apps somewhere else is a decision about this product, not a step toward deleting this environment — so the console says what it found and leaves it.",
+      "**Reports instead of applying.** The three apps' `.env.local` files are compared against the API URL captured before the stack that published it went away, and anything the run could not delete is listed with the reason. Pointing the apps somewhere else is a decision about this product, not a step toward deleting this environment — so the console says what it found and leaves it.",
     satisfiedLabel: "Reported",
     apply: async (ctx) => {
       const outputs = ctx.data.outputs as StageOutputs | null;
