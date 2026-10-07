@@ -287,6 +287,42 @@ a *machine* consumes, and a receiver that was handed one language would have no 
 tell that a translation existed. A consumer that wants one language has the query API
 and `?language=` for that.
 
+### AI translations
+
+A model can do the translation, and **cannot ship it** — that is the whole design, and
+it is three mechanisms rather than one promise.
+
+1. **`POST /v1/data/translate/{p}/{d}` writes into the draft.** Not the published row,
+   not a new document: the same draft/publish pair every other write uses, so nothing
+   a reader sees changes until somebody publishes. The work is per *string, at a path*
+   — `title.fr`, `body.fr.0.children.1.text` — which is why rich text keeps its marks,
+   its links and its images, why a field with nothing in it is never sent, and why the
+   result is applied as a patch of dotted paths through the same machinery an editor's
+   save uses: same validation, same revision, same conflict rules. `fields` narrows a
+   request for a document too large for one model call.
+2. **The document records that a model wrote it.** `_translations[language]` says
+   `source: 'ai'` with the model id, and every read returns it, so no surface has to
+   guess. A write that changes a language **clears that language's approval**, because
+   what was approved was a particular text and the row no longer holds it.
+3. **`publish` refuses while a language a model wrote is unapproved** — 409
+   `UNAPPROVED_TRANSLATION`, naming the languages. The one thing that clears it is the
+   `approve` mutation, and **that one needs a person**: a request carrying an API token
+   is refused (403 `APPROVAL_REQUIRES_A_PERSON`), because a machine cannot be the human
+   in "a human approves this". So a pipeline may translate and may not approve, and a
+   document translated by a model cannot reach a reader without somebody reading it.
+
+The provider is **AWS Bedrock, through the Converse API** (`services/api/src/lib/bedrock.ts`),
+for two reasons that are about this deployment rather than about models: the credential
+is the Lambda's own IAM role, so there is no key to store or rotate; and Converse takes
+one request shape for every model Bedrock serves, so the model really is a config value
+(`translation.model` in `infra/config/achar-<stage>.json`, absent meaning this stage does
+not translate and the route answers 501). Which models an account may invoke is granted
+in the Bedrock console, not by a deploy.
+
+What a model is asked for is JSON keyed by the paths it was given, and a model that
+answers with anything else fails the request rather than applying half of it: half a
+translated document is worse than none, because the half that arrived looks finished.
+
 ## The content API
 
 Everything is under `/v1`. Every route needs a bearer token — either a Cognito ID
